@@ -1,0 +1,55 @@
+﻿# Entornos y caches de Python
+__pycache__/
+*.py[cod]
+*.class
+.venv/
+venv/
+env/
+
+# PyInstaller y compilaciones
+build/
+dist/
+*.spec.bak
+
+# Base de datos SQLite local con registros y lecturas personales
+datos/*.db
+datos/*.sqlite
+datos/*.sqlite3
+
+# Carpetas de datos locales (preservan estructura vacia con .gitkeep)
+datos/backups/*
+!datos/backups/.gitkeep
+
+datos/reportes/*
+!datos/reportes/.gitkeep
+
+datos/historial_lecturas/*
+!datos/historial_lecturas/.gitkeep
+
+datos/historico_dtcs/*
+!datos/historico_dtcs/.gitkeep
+
+datos/exploraciones/*
+!datos/exploraciones/.gitkeep
+
+historial_lecturas/*
+!historial_lecturas/.gitkeep
+
+# Archivos de sensores y logs
+datos/sensores_*.csv
+*.log
+audidiag_registro_detallado.txt
+*.tmp
+
+# Documentos personales / notas privadas / diagramas html
+*.pdf
+instrument_fuses*.html
+GUIA_ANTIGRAVITY_PORTATIL.md
+PROYECTO_CARPLAY_AUDI_A6.md
+ROADMAP_FUTURAS_MEJORAS.md
+
+# Archivos de sistema / IDE
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini

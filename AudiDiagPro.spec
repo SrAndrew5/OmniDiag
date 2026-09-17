@@ -1,0 +1,61 @@
+# -*- mode: python ; coding: utf-8 -*-
+
+
+a = Analysis(
+    ['audi_diag_pro.py'],
+    pathex=[],
+    binaries=[('libusb-1.0.dll', '.')],
+    datas=[
+        ('datos/dtc_catalog.json', 'datos'),
+        ('datos/audidiag.db', 'datos'),
+    ],
+    hiddenimports=[
+        'can.interfaces.gs_usb',
+        'can.interfaces.slcan',
+        'can.interfaces.virtual',
+        'gs_usb',
+        'usb',
+        'usb.core',
+        'usb.backend.libusb1',
+        'libusb_package',
+        'isotp',
+        'ui.osciloscopio',
+        'ui.dialogo_diff_backups',
+        'ui.dialogo_gateway_list',
+        'ui.dialogo_ficha_dtc',
+        'ui.cronometro_prestaciones',
+        'obd.vag_service_wizards',
+        'obd.vag_dtc_smart_guide',
+        'gestion.report_generator',
+        'gestion.database_manager',
+        'gestion.backup_manager',
+    ],
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludes=[],
+    noarchive=False,
+    optimize=0,
+)
+pyz = PYZ(a.pure)
+
+exe = EXE(
+    pyz,
+    a.scripts,
+    a.binaries,
+    a.datas,
+    [],
+    name='AudiDiagPro',
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    runtime_tmpdir=None,
+    console=True,
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+)
