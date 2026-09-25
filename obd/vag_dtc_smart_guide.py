@@ -173,6 +173,43 @@ GUIA_DTC_VAG: Dict[str, dict] = {
         "causas_tipicas": "Tensión de batería por debajo de 11.8V en reposo. Batería degradada, alternador sin carga o consumo parásito en reposo.",
         "comprobacion": "1. Medir tensión en bornes del vano motor.\n2. Si la batería tiene más de 5 años, sustituir y codificar con el asistente BEM en la pestaña Mantenimiento de la app.",
     },
+
+    # ── ALARMA ANTIRROBO DWA (MÓDULO 46 CONFORT / BCM2 J393) ──
+    "01134": {
+        "sistema": "Alarma Antirrobo DWA (Módulo 46 - Confort)",
+        "componente": "Bocina / Sirena de Alarma con Batería Integrada (H12)",
+        "ubicacion": "En el vano motor, debajo del torpedo vierteaguas (zona del mecanismo de limpiaparabrisas) o tras la aleta delantera derecha.",
+        "causas_tipicas": "⭐ EL FALLO ESTRELLA DEL A6 C6: Las pilas recargables de Ni-MH internas de la sirena H12 han envejecido, sulfatado y derramado ácido sobre la placa de circuito impreso. El cortocircuito interno hace que la alarma se DISPARE SOLA aleatoriamente por la noche.",
+        "comprobacion": "1. Si suena de noche sin motivo, el 90% es la sirena H12.\n2. Desconectar la clavija de la sirena H12 para comprobar si cesan los disparos.\n3. Sustituir la sirena H12 (ref. 1K0 951 605 o 8K0 951 605) o abrirla con cúter para desoldar las pilas sulfatadas y limpiar con alcohol isopropílico.",
+    },
+    "01370": {
+        "sistema": "Alarma Antirrobo DWA (Módulo 46 - Confort)",
+        "componente": "Sensor de Vigilancia del Habitáculo / Volumétrico (G273)",
+        "ubicacion": "En el plafón superior de luces del techo (junto al retrovisor interior).",
+        "causas_tipicas": "Una polilla, mosca o araña atrapada dentro del coche de noche; ventanilla dejada 1 cm abierta con corriente de aire; o sensor ultrasónico descalibrado.",
+        "comprobacion": "1. Pulsar el botón de desactivación de volumétricos (en el canto de la puerta del conductor) antes de cerrar el coche.\n2. Si la alarma no vuelve a saltar, revisar que no haya insectos o ajustar sensibilidad en adaptación del módulo 46.",
+    },
+    "01371": {
+        "sistema": "Alarma Antirrobo DWA (Módulo 46 - Confort)",
+        "componente": "Interruptor de Contacto de Puerta Conductor (F2)",
+        "ubicacion": "Integrado dentro de la cerradura eléctrica de la puerta del conductor.",
+        "causas_tipicas": "Microinterruptor (microswitch) de la cerradura desgastado. Falso contacto de puerta abierta cuando el coche está cerrado.",
+        "comprobacion": "Verificar si la luz de cortesía de la puerta parpadea o si el cuadro marca puerta abierta de forma intermitente.",
+    },
+    "01574": {
+        "sistema": "Alarma Antirrobo DWA (Módulo 46 - Confort)",
+        "componente": "Interruptor de Contacto del Capó Motor (F266)",
+        "ubicacion": "En el cierre central del capó delantero, dentro del pestillo del radiador.",
+        "causas_tipicas": "Humedad, grasa o suciedad en el microswitch del pestillo del capó. Al enfriarse el coche de noche, el contacto dilata y dispara la alarma.",
+        "comprobacion": "1. Desconectar la clema de 2 pines del cierre del capó y limpiar con limpiacontactos.\n2. Verificar en el cuadro de instrumentos si el aviso de capó abierto aparece correctamente.",
+    },
+    "01572": {
+        "sistema": "Alarma Antirrobo DWA (Módulo 46 - Confort)",
+        "componente": "Sensor de Inclinación y Antirremolque (G384)",
+        "ubicacion": "Bajo la consola central o en el lateral derecho del maletero.",
+        "causas_tipicas": "El coche está aparcado en una cuesta muy inclinada, suspensión neumática bajando lentamente por la noche, o sensor de aceleración descalibrado.",
+        "comprobacion": "Pulsar el botón de desactivación de remolque (en la puerta del conductor) al aparcar para comprobar si el sensor es el causante.",
+    },
 }
 
 
