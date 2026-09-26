@@ -31,6 +31,7 @@ from ui.dialogo_diff_backups import DialogoDiffBackups
 from ui.dialogo_gateway_list import DialogoGatewayList
 from ui.cronometro_prestaciones import CronometroPrestacionesWidget
 from ui.dialogo_ficha_dtc import DialogoFichaDTC
+from ui.dialogo_polo_kline import DialogoPoloKLine
 import webbrowser
 
 
@@ -481,6 +482,18 @@ class MainWindow(QMainWindow):
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn.clicked.connect(self.iniciar_conexion)
         lyt.addWidget(btn)
+
+        # ── Acceso Rápido Asistente K-Line Polo 9N3 ──
+        btn_polo = QPushButton("🚗   ASISTENTE VAG K-LINE — VW POLO 9N3 (PQ24)")
+        btn_polo.setProperty("class", "btn-secundario")
+        btn_polo.setFixedHeight(44)
+        btn_polo.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_polo.setStyleSheet(
+            "background-color: #131E32; color: #38BDF8; border: 1px solid #1E2E4A; "
+            "border-radius: 7px; font-weight: 700; font-size: 13px;"
+        )
+        btn_polo.clicked.connect(self._abrir_asistente_polo_kline)
+        lyt.addWidget(btn_polo)
 
         lyt.addStretch()
         self.stack.addWidget(page)
@@ -2062,6 +2075,11 @@ class MainWindow(QMainWindow):
 
         modulo, cod, desc, ff = self._dtcs_datos[row]
         dlg = DialogoFichaDTC(modulo=modulo, codigo=cod, descripcion=desc, freeze_frame=ff, parent=self)
+        dlg.exec()
+
+    def _abrir_asistente_polo_kline(self):
+        """Abre la ventana modal del Asistente K-Line para VW Polo 9N3."""
+        dlg = DialogoPoloKLine(parent=self)
         dlg.exec()
 
     def recibir_sensores(self, datos: list):
