@@ -2841,6 +2841,7 @@ class MainWindow(QMainWindow):
 
             modulos_polo_dtc = [
                 "Confort / BCM (46)",
+                "Central Eléctrica / Luces (09)",
                 "Motor (01)",
                 "ABS / Frenos (03)",
                 "Cuadro de Instrumentos (17)",
@@ -2862,7 +2863,16 @@ class MainWindow(QMainWindow):
             if hasattr(self, "combo_coding"):
                 self.combo_coding.blockSignals(True)
                 self.combo_coding.clear()
-                self.combo_coding.addItems(["Confort / BCM (46)", "Cuadro de Instrumentos (17)", "Dirección Asistida TRW (44)"])
+                self.combo_coding.addItems([
+                    "Confort / BCM (46)",
+                    "Central Eléctrica / Luces (09)",
+                    "Cuadro de Instrumentos (17)",
+                    "Dirección Asistida TRW (44)",
+                    "Motor 1.9 TDI (01)",
+                    "Airbag (15)",
+                    "Climatización (08)",
+                    "Radio / Sonido (56)",
+                ])
                 self.combo_coding.setCurrentText("Confort / BCM (46)")
                 self.combo_coding.blockSignals(False)
                 self._cargar_catalogo_confort(self.combo_coding.currentText())

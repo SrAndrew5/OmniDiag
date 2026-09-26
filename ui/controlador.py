@@ -162,19 +162,49 @@ ADAPTACIONES_POLO_KLINE = {
         {"nombre": "Apertura Selectiva de Puertas", "canal": 7, "valor": 0, "min": 0, "max": 1, "unidad": "0=1 Toque / 1=2 Toques", "desc": "0 = Un toque abre todas las puertas; 1 = Requiere dos toques"},
         {"nombre": "Confirmación Intermitentes al cerrar", "canal": 8, "valor": 1, "min": 0, "max": 1, "unidad": "0=No / 1=Sí", "desc": "Destello óptico de intermitentes al bloquear puertas"},
         {"nombre": "Confirmación Intermitentes al abrir", "canal": 9, "valor": 1, "min": 0, "max": 1, "unidad": "0=No / 1=Sí", "desc": "Doble destello óptico de intermitentes al desbloquear"},
+        {"nombre": "Tono de Sirena Alarma DWA", "canal": 10, "valor": 1, "min": 1, "max": 3, "unidad": "1=Europa / 2=Alemania", "desc": "Tipo de tono de sirena antirrobo H12"},
+        {"nombre": "Sensibilidad Sensor Volumétrico G273", "canal": 11, "valor": 100, "min": 50, "max": 100, "unidad": "%", "desc": "Sensibilidad volumétrica de habitáculo"},
+        {"nombre": "Confort Elevalunas desde Mando", "canal": 14, "valor": 1, "min": 0, "max": 1, "unidad": "0=No / 1=Sí", "desc": "Subida y bajada de cristales manteniendo pulsado el mando"},
     ],
-    "Motor (01)": [
-        {"nombre": "Ajuste Ralentí RPM", "canal": 1, "valor": 128, "min": 120, "max": 136, "unidad": "Base 128 (~850 rpm)", "desc": "Ajuste fino de revoluciones de ralentí en EDC15"},
-        {"nombre": "Ajuste Enriquecimiento Arranque", "canal": 2, "valor": 128, "min": 120, "max": 136, "unidad": "Base 128", "desc": "Ajuste de inyección para mejorar encendido en frío"},
-        {"nombre": "Tiempo Precalentamiento Calentadores", "canal": 12, "valor": 32768, "min": 32700, "max": 32800, "unidad": "Pulsos", "desc": "Tiempo de activación de calentadores de arranque"},
+    "Central Eléctrica / Luces (09)": [
+        {"nombre": "Retardo Luces Coming Home", "canal": 1, "valor": 30, "min": 0, "max": 60, "unidad": "Segundos", "desc": "Tiempo de encendido de luces al accionar ráfaga con motor parado"},
+        {"nombre": "Limpia Trasero Automático Marcha Atrás", "canal": 2, "valor": 1, "min": 0, "max": 1, "unidad": "0=No / 1=Sí", "desc": "Barre la luneta trasera al meter marcha atrás si el limpia delantero está activo"},
+        {"nombre": "Barrido Antigoteo Delantero (Tear-Drop)", "canal": 3, "valor": 1, "min": 0, "max": 1, "unidad": "0=No / 1=Sí", "desc": "Barrido extra retardado a los 5s de lavar el parabrisas"},
+        {"nombre": "Luces Diurnas DRL Automáticas", "canal": 4, "valor": 0, "min": 0, "max": 1, "unidad": "0=No / 1=Sí", "desc": "Enciende luces de cruce automáticamente al poner contacto"},
+        {"nombre": "Temporizador Luneta Térmica", "canal": 5, "valor": 15, "min": 1, "max": 30, "unidad": "Minutos", "desc": "Tiempo de funcionamiento de luneta térmica trasera"},
     ],
     "Cuadro de Instrumentos (17)": [
         {"nombre": "Reset Intervalo Servicio / Aceite", "canal": 2, "valor": 0, "min": 0, "max": 1, "unidad": "0=Resetear / 1=Activo", "desc": "Resetear aviso de inspección y cambio de aceite"},
-        {"nombre": "Aviso Cinturón de Seguridad", "canal": 30, "valor": 1, "min": 0, "max": 1, "unidad": "0=No / 1=Sí", "desc": "Activa zumbador y testigo de cinturón en cuadro"},
+        {"nombre": "Ajuste Aforador Depósito Combustible", "canal": 30, "valor": 128, "min": 120, "max": 136, "unidad": "Base 128 (Ohm)", "desc": "Calibración fina de resistencia del aforador"},
+        {"nombre": "Aviso Acústico Exceso Velocidad", "canal": 35, "valor": 120, "min": 0, "max": 180, "unidad": "km/h (0=Off)", "desc": "Chime de advertencia de velocidad en cuadro"},
+        {"nombre": "Km desde último cambio de aceite", "canal": 40, "valor": 0, "min": 0, "max": 300, "unidad": "x100 km", "desc": "Distancia acumulada de uso de aceite"},
+        {"nombre": "Días desde última inspección", "canal": 41, "valor": 0, "min": 0, "max": 730, "unidad": "Días", "desc": "Tiempo acumulado desde última revisión"},
+        {"nombre": "Km máximos hasta próximo servicio", "canal": 43, "valor": 150, "min": 150, "max": 300, "unidad": "x100 km", "desc": "Límite kilometraje (150 = 15.000 km)"},
+        {"nombre": "Días máximos hasta próxima revisión", "canal": 44, "valor": 365, "min": 365, "max": 730, "unidad": "Días", "desc": "Límite temporal (365 = 1 año)"},
+        {"nombre": "Calidad de Aceite Motor", "canal": 45, "valor": 1, "min": 1, "max": 2, "unidad": "1=Fijo / 2=LongLife", "desc": "Tipo de intervalo: 1 (Fijo VW 505.01) o 2 (Flexible)"},
     ],
     "Dirección Asistida TRW (44)": [
-        {"nombre": "Curva Asistencia Electrohidráulica", "canal": 1, "valor": 2, "min": 1, "max": 3, "unidad": "1=Suave / 2=Normal / 3=GTI", "desc": "Mapa de dureza de la cremallera TRW"},
-    ]
+        {"nombre": "Curva Asistencia Electrohidráulica", "canal": 1, "valor": 2, "min": 1, "max": 4, "unidad": "1=Confort / 2=Estándar / 3=GTI / 4=Eco", "desc": "Mapa de dureza de la cremallera asistida TRW"},
+    ],
+    "Motor (01)": [
+        {"nombre": "Masa de Inyección en Ralentí", "canal": 1, "valor": 32768, "min": 32700, "max": 32800, "unidad": "Base 32768", "desc": "Ajuste de mg/str de inyección en ralentí para eliminar vibraciones"},
+        {"nombre": "Ajuste Fino Ralentí RPM", "canal": 2, "valor": 32768, "min": 32700, "max": 32850, "unidad": "Base 32768 (~860 rpm)", "desc": "Revoluciones por minuto de ralentí en centralita EDC15/EDC16"},
+        {"nombre": "Tasa de Recirculación EGR", "canal": 3, "valor": 33768, "min": 32768, "max": 33768, "unidad": "Base 32768", "desc": "Reducción de EGR para mayor caudal de aire limpio y menor carbonilla"},
+        {"nombre": "Dosis Combustible Arranque Caliente", "canal": 5, "valor": 32768, "min": 32700, "max": 32850, "unidad": "Base 32768", "desc": "Aumento de inyección <250 RPM para arranque instantáneo en caliente"},
+        {"nombre": "Tiempo Precalentamiento Calentadores", "canal": 12, "valor": 32768, "min": 32700, "max": 32800, "unidad": "Pulsos", "desc": "Tiempo de activación de calentadores de arranque en frío"},
+    ],
+    "Airbag (15)": [
+        {"nombre": "Desactivar Airbag Pasajero (Silla Bebé)", "canal": 1, "valor": 0, "min": 0, "max": 1, "unidad": "0=Activo / 1=Desactivado", "desc": "Desconexión electrónica de airbag frontal derecho"},
+        {"nombre": "Supervisión Airbags Laterales Asientos", "canal": 2, "valor": 0, "min": 0, "max": 1, "unidad": "0=Activo / 1=Desactivado", "desc": "Desconexión electrónica de airbags de tórax en asientos"},
+    ],
+    "Climatización (08)": [
+        {"nombre": "Recirculación con Marcha Atrás", "canal": 1, "valor": 1, "min": 0, "max": 1, "unidad": "0=No / 1=Sí", "desc": "Cierra compuerta exterior V113 para evitar humos de escape al retroceder"},
+        {"nombre": "Cierre Compuerta con Lavaparabrisas", "canal": 2, "valor": 1, "min": 0, "max": 1, "unidad": "0=No / 1=Sí", "desc": "Cierra aire exterior 15s al usar limpia para evitar olores químicos"},
+    ],
+    "Radio / Sonido (56)": [
+        {"nombre": "Ecualización Acústica DSP Polo 9N3", "canal": 1, "valor": 1, "min": 0, "max": 1, "unidad": "0=Plana / 1=DSP Polo", "desc": "Mapa de sonido adaptado a la acústica de carrocería del Polo"},
+        {"nombre": "Configuración 4 Altavoces", "canal": 2, "valor": 1, "min": 0, "max": 1, "unidad": "0=2 Altavoces / 1=4 Altavoces", "desc": "Habilita fader y salida a puertas traseras"},
+    ],
 }
 
 ACTUADORES_POLO_KLINE = {
@@ -183,20 +213,40 @@ ACTUADORES_POLO_KLINE = {
         {"nombre": "Desbloqueo Centralizado", "canal": "02", "desc": "Desbloquea todas las cerraduras", "duracion": 2},
         {"nombre": "Bocina Alarma / Claxon Confort", "canal": "03", "desc": "Prueba acústica de la bocina de alarma", "duracion": 2},
         {"nombre": "Intermitentes de Emergencia", "canal": "04", "desc": "Hace parpadear los intermitentes 3 veces", "duracion": 3},
+        {"nombre": "Elevalunas Izquierdo (Conductor)", "canal": "05", "desc": "Activa subida y bajada del elevalunas V147", "duracion": 3},
+        {"nombre": "Elevalunas Derecho (Copiloto)", "canal": "06", "desc": "Activa subida y bajada del elevalunas V148", "duracion": 3},
+    ],
+    "Central Eléctrica / Luces (09)": [
+        {"nombre": "Luces Largas / Ráfagas", "canal": "01", "desc": "Enciende los proyectores de luces largas durante 3 segundos", "duracion": 3},
+        {"nombre": "Faros Antiniebla Delanteros", "canal": "02", "desc": "Enciende los faros antiniebla L22/L23", "duracion": 3},
+        {"nombre": "Limpiaparabrisas Delantero Vel 1", "canal": "03", "desc": "Acciona los brazos de limpiaparabrisas delanteros", "duracion": 3},
+        {"nombre": "Limpia Trasero y Lavaparabrisas", "canal": "04", "desc": "Acciona el motor trasero V12 y bomba de agua", "duracion": 3},
+        {"nombre": "Luneta Térmica Trasera", "canal": "05", "desc": "Activa el relé de desempañado térmico", "duracion": 3},
     ],
     "Motor (01)": [
-        {"nombre": "Relé Calentadores Bujías", "canal": "01", "desc": "Activa relé J52 de calentadores 3 segundos", "duracion": 3},
-        {"nombre": "Válvula N75 Presión Turbo", "canal": "02", "desc": "Cicla la electroválvula de vacío de regulación del turbo", "duracion": 4},
-        {"nombre": "Válvula N18 Recirculación EGR", "canal": "03", "desc": "Prueba de apertura y cierre de la válvula EGR", "duracion": 4},
-        {"nombre": "Ventilador Radiador V7", "canal": "04", "desc": "Activa electroventiladores del radiador", "duracion": 3},
+        {"nombre": "Relé Calentadores Bujías (J52)", "canal": "01", "desc": "Activa relé J52 de calentadores 3 segundos", "duracion": 3},
+        {"nombre": "Válvula N75 Presión Turbo", "canal": "02", "desc": "Cicla la electroválvula de vacío de regulación de geometría del turbo", "duracion": 4},
+        {"nombre": "Válvula N18 Recirculación EGR", "canal": "03", "desc": "Prueba de apertura y cierre de la válvula neumática EGR", "duracion": 4},
+        {"nombre": "Ventilador Radiador V7", "canal": "04", "desc": "Activa electroventiladores de refrigeración del motor", "duracion": 3},
+        {"nombre": "Chapaleta Apagado Suave N239", "canal": "05", "desc": "Cierra la mariposa de apagado suave para corte limpio del motor", "duracion": 3},
+        {"nombre": "Relé Bomba Combustible J17", "canal": "06", "desc": "Activa la prebomba sumergida del depósito durante 3 segundos", "duracion": 3},
     ],
     "Cuadro de Instrumentos (17)": [
         {"nombre": "Test Agujas (Velocímetro / Cuentavueltas)", "canal": "01", "desc": "Mueve las agujas a fondo de escala y centro (100 km/h / 3000 rpm)", "duracion": 4},
-        {"nombre": "Test Testigos Luminosos", "canal": "02", "desc": "Enciende todos los testigos luminosos y zumbador", "duracion": 3},
+        {"nombre": "Test Testigos Luminosos", "canal": "02", "desc": "Enciende todos los testigos luminosos del cuadro", "duracion": 3},
+        {"nombre": "Zumbador / Gong Acústico", "canal": "03", "desc": "Prueba de sonido de la chicharra acústica de avisos", "duracion": 3},
+        {"nombre": "Test Display LCD / Odómetro", "canal": "04", "desc": "Enciende todos los segmentos del display digital de kilómetros y reloj", "duracion": 3},
     ],
     "ABS / Frenos (03)": [
         {"nombre": "Bomba Hidráulica ABS (V39)", "canal": "01", "desc": "Activa la electrobomba de recirculación del bloque hidráulico ABS durante 3 segundos", "duracion": 3},
         {"nombre": "Válvulas Entrada / Salida ABS", "canal": "02", "desc": "Cicla las electroválvulas solenoides del bloque ABS para comprobar que no están atascadas", "duracion": 4},
+        {"nombre": "Test Estático de Presión de Freno", "canal": "03", "desc": "Verificación de estanqueidad y presiones de pedal", "duracion": 3},
+    ],
+    "Climatización (08)": [
+        {"nombre": "Servomotor Recirculación (V113)", "canal": "01", "desc": "Abre y cierra la compuerta de recirculación de aire", "duracion": 3},
+        {"nombre": "Servomotor Temperatura (V68)", "canal": "02", "desc": "Mueve la compuerta de mezcla de frío/calor a tope frío y caliente", "duracion": 4},
+        {"nombre": "Válvula Compresor A/C (N280)", "canal": "03", "desc": "Activa la regulación de cilindrada del compresor de aire acondicionado", "duracion": 3},
+        {"nombre": "Turbina Soplador Interior (V2)", "canal": "04", "desc": "Prueba de giro del ventilador de climatización en cabina", "duracion": 3},
     ],
 }
 
@@ -216,6 +266,8 @@ FALLOS_SIMULADOS_KLINE = {
     "Airbag (15)": [],
     "Climatización (08)": [],
     "Radio / Sonido (56)": [],
+    "Central Eléctrica / Luces (09)": [],
+    "Dirección Asistida TRW (44)": [],
 }
 
 SENSORES_POLO_KLINE = [
@@ -227,6 +279,10 @@ SENSORES_POLO_KLINE = [
     ("Caudalímetro MAF", 460.0, "mg/str", 1200.0),
     ("Cantidad Inyectada", 5.2, "mg/str", 60.0),
     ("Voltaje Batería / Borne 30", 14.1, "V", 16.0),
+    ("Ángulo Torsión Synchro Levas", 0.5, "°", 6.0),
+    ("Temp. Combustible (G81)", 38.0, "°C", 100.0),
+    ("Pedal Acelerador", 0.0, "%", 100.0),
+    ("Consumo Instantáneo Ralentí", 0.5, "l/h", 25.0),
 ]
 
 

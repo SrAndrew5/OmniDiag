@@ -221,7 +221,11 @@ class TestPoloMainIntegration(unittest.TestCase):
         # Módulos de codificación en Polo
         modulos_coding = [self.win.combo_coding.itemText(i) for i in range(self.win.combo_coding.count())]
         self.assertIn("Confort / BCM (46)", modulos_coding)
+        self.assertIn("Central Eléctrica / Luces (09)", modulos_coding)
         self.assertIn("Cuadro de Instrumentos (17)", modulos_coding)
+        self.assertIn("Dirección Asistida TRW (44)", modulos_coding)
+        self.assertIn("Motor 1.9 TDI (01)", modulos_coding)
+        self.assertIn("Climatización (08)", modulos_coding)
         self.assertNotIn("Gateway CAN (19)", modulos_coding)
         self.assertNotIn("Caja de Cambios (02)", modulos_coding)
         self.assertNotIn("Freno de Mano EPB (53)", modulos_coding)
@@ -239,9 +243,11 @@ class TestPoloMainIntegration(unittest.TestCase):
         self.win.combo_modo.setCurrentIndex(5)
         modulos_actu = [self.win.combo_actu.itemText(i) for i in range(self.win.combo_actu.count())]
         self.assertIn("Confort / BCM (46)", modulos_actu)
+        self.assertIn("Central Eléctrica / Luces (09)", modulos_actu)
         self.assertIn("Motor (01)", modulos_actu)
         self.assertIn("Cuadro de Instrumentos (17)", modulos_actu)
         self.assertIn("ABS / Frenos (03)", modulos_actu)
+        self.assertIn("Climatización (08)", modulos_actu)
         self.assertNotIn("Caja de Cambios (02)", modulos_actu)
         self.assertNotIn("Freno de Mano EPB (53)", modulos_actu)
 
