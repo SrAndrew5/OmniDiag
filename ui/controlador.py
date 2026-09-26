@@ -252,13 +252,13 @@ ACTUADORES_POLO_KLINE = {
 
 FALLOS_SIMULADOS_KLINE = {
     "Confort / BCM (46)": [
-        ("00928", "Unidad de control para cierre centralizado lado conductor (F220) — Señal no plausible", {}),
-        ("00932", "Motor elevalunas lado conductor (V147) — Sin ajuste básico o adaptación", {}),
+        ("00928 [ESPORÁDICO]", "Unidad de control para cierre centralizado lado conductor (F220) — Señal no plausible", {}),
+        ("00932 [ESTÁTICO]", "Motor elevalunas lado conductor (V147) — Sin ajuste básico o adaptación", {}),
     ],
     "Motor (01)": [
-        ("01650", "Bujía incandescente Cilindro 2 (Q11) — Circuito defectuoso (P0672 / Causa mal arranque)",
+        ("01650 [ESTÁTICO]", "Bujía incandescente Cilindro 2 (Q11) — Circuito defectuoso (P0672 / Causa mal arranque)",
          {"RPM": (860.0, "rpm"), "Temp. Motor": (14.0, "°C"), "Voltaje": (10.1, "V")}),
-        ("00532", "Tensión de alimentación B+ / Borne 30 — Valor por debajo del umbral mínimo (caída en arranque)",
+        ("00532 [ESPORÁDICO]", "Tensión de alimentación B+ / Borne 30 — Valor por debajo del umbral mínimo (caída en arranque)",
          {"Voltaje": (9.4, "V")}),
     ],
     "ABS / Frenos (03)": [],

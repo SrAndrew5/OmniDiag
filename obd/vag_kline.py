@@ -619,6 +619,20 @@ class MockVAGKLineECU:
         return True
 
 
+KWP1281_SYMPTOMS = {
+    0x01: "Cortocircuito a masa",
+    0x02: "Cortocircuito a positivo",
+    0x03: "Sin señal o circuito abierto",
+    0x04: "Fallo mecánico",
+    0x06: "Cortocircuito entre líneas de señal",
+    0x07: "Señal demasiado baja",
+    0x08: "Señal no plausible (inverosímil)",
+    0x10: "Límite de adaptación excedido",
+    0x23: "Sin ajuste básico o adaptación no realizada",
+    0x24: "Fallo eléctrico en el circuito",
+}
+
+
 class VAGKLineClient:
     def __init__(self, port_name: str = "MOCK", baudrate: int = 9600):
         self.port_name = port_name
@@ -707,10 +721,14 @@ class VAGKLineClient:
                     c_high, c_low, status = datos[i], datos[i+1], datos[i+2]
                     codigo_int = (c_high << 8) | c_low
                     codigo_str = f"{codigo_int:05d}"
-                    estado_str = "Estatico" if (status & 0x01) else "Esporadico"
+                    es_esporadico = bool(status & 0x80)
+                    estado_str = "Esporadico" if es_esporadico else "Estatico"
+                    sintoma_code = status & 0x3F
+                    sintoma_desc = KWP1281_SYMPTOMS.get(sintoma_code, "")
+                    desc_sintoma = f" — {sintoma_desc}" if sintoma_desc else ""
                     fallos.append({
                         "codigo": codigo_str,
-                        "desc": f"Averia registrada en componente {codigo_str}",
+                        "desc": f"Averia registrada en componente {codigo_str}{desc_sintoma}",
                         "estado": estado_str
                     })
         except Exception:
