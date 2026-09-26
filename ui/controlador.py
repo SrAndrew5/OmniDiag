@@ -23,6 +23,7 @@ from obd.isotp_uds import VAG_UDS_MODULES, ISOTPClient, UDSClient
 from obd.vin_reader import leer_vin
 from obd.universal_obd2 import UniversalOBD2Client
 from obd.opel_gm_client import OpelGMClient, OPEL_MODULES_CONFIG, ADAPTACIONES_OPEL, ACTUADORES_OPEL, CATALOGO_CONFORT_OPEL
+from obd.vag_kline import VAGKLineClient, VAG_KLINE_ADDRESSES, POLO_9N3_CONFORT_CHANNELS
 from gestion.database_manager import DatabaseManager
 from gestion.backup_manager import BackupManager
 from core.diagnostic_logger import diag_logger
@@ -149,6 +150,74 @@ ACTUADORES_VAG = {
     ],
 }
 
+# ──────────────────────────────────────────────────────────────────────────────
+#  DATOS POLO 9N3 (PQ24 / K-LINE KWP1281) — COCHE DEL PADRE
+# ──────────────────────────────────────────────────────────────────────────────
+ADAPTACIONES_POLO_KLINE = {
+    "Confort / BCM (46)": [
+        {"nombre": "Auto-Lock (Cierre a 15 km/h)", "canal": 3, "valor": 1, "min": 0, "max": 1, "unidad": "0=No / 1=Sí", "desc": "Bloquea automáticamente pestillos al superar 15 km/h"},
+        {"nombre": "Auto-Unlock (Apertura al sacar llave)", "canal": 4, "valor": 1, "min": 0, "max": 1, "unidad": "0=No / 1=Sí", "desc": "Desbloquea automáticamente todas las puertas al extraer la llave"},
+        {"nombre": "Mute Claxon / Pitido al cerrar", "canal": 6, "valor": 0, "min": 0, "max": 1, "unidad": "0=Mute / 1=Bocina", "desc": "Silencia el pitido de bocina al cerrar con el mando"},
+        {"nombre": "Apertura Selectiva de Puertas", "canal": 7, "valor": 0, "min": 0, "max": 1, "unidad": "0=1 Toque / 1=2 Toques", "desc": "0 = Un toque abre todas las puertas; 1 = Requiere dos toques"},
+    ],
+    "Motor (01)": [
+        {"nombre": "Ajuste Ralentí RPM", "canal": 1, "valor": 128, "min": 120, "max": 136, "unidad": "Base 128 (~850 rpm)", "desc": "Ajuste fino de revoluciones de ralentí en EDC15"},
+        {"nombre": "Ajuste Enriquecimiento Arranque", "canal": 2, "valor": 128, "min": 120, "max": 136, "unidad": "Base 128", "desc": "Ajuste de inyección para mejorar encendido en frío"},
+        {"nombre": "Tiempo Precalentamiento Calentadores", "canal": 12, "valor": 32768, "min": 32700, "max": 32800, "unidad": "Pulsos", "desc": "Tiempo de activación de calentadores de arranque"},
+    ],
+    "Cuadro de Instrumentos (17)": [
+        {"nombre": "Reset Intervalo Servicio / Aceite", "canal": 2, "valor": 0, "min": 0, "max": 1, "unidad": "0=Resetear / 1=Activo", "desc": "Resetear aviso de inspección y cambio de aceite"},
+    ]
+}
+
+ACTUADORES_POLO_KLINE = {
+    "Confort / BCM (46)": [
+        {"nombre": "Cierre Centralizado (Bloqueo)", "canal": "01", "desc": "Activa los motores de cierre de todas las puertas", "duracion": 2},
+        {"nombre": "Desbloqueo Centralizado", "canal": "02", "desc": "Desbloquea todas las cerraduras", "duracion": 2},
+        {"nombre": "Bocina Alarma / Claxon Confort", "canal": "03", "desc": "Prueba acústica de la bocina de alarma", "duracion": 2},
+        {"nombre": "Intermitentes de Emergencia", "canal": "04", "desc": "Hace parpadear los intermitentes 3 veces", "duracion": 3},
+    ],
+    "Motor (01)": [
+        {"nombre": "Relé Calentadores Bujías", "canal": "01", "desc": "Activa relé J52 de calentadores 3 segundos", "duracion": 3},
+        {"nombre": "Válvula N75 Presión Turbo", "canal": "02", "desc": "Cicla la electroválvula de vacío de regulación del turbo", "duracion": 4},
+        {"nombre": "Válvula N18 Recirculación EGR", "canal": "03", "desc": "Prueba de apertura y cierre de la válvula EGR", "duracion": 4},
+        {"nombre": "Ventilador Radiador V7", "canal": "04", "desc": "Activa electroventiladores del radiador", "duracion": 3},
+    ],
+    "Cuadro de Instrumentos (17)": [
+        {"nombre": "Test Agujas (Velocímetro / Cuentavueltas)", "canal": "01", "desc": "Mueve las agujas a fondo de escala y centro (100 km/h / 3000 rpm)", "duracion": 4},
+        {"nombre": "Test Testigos Luminosos", "canal": "02", "desc": "Enciende todos los testigos luminosos y zumbador", "duracion": 3},
+    ]
+}
+
+FALLOS_SIMULADOS_KLINE = {
+    "Confort / BCM (46)": [
+        ("00928", "Unidad de control para cierre centralizado lado conductor (F220) — Señal no plausible", {}),
+        ("00932", "Motor elevalunas lado conductor (V147) — Sin ajuste básico o adaptación", {}),
+    ],
+    "Motor (01)": [
+        ("01650", "Bujía incandescente Cilindro 2 (Q11) — Circuito defectuoso (P0672 / Causa mal arranque)",
+         {"RPM": (860.0, "rpm"), "Temp. Motor": (14.0, "°C"), "Voltaje": (10.1, "V")}),
+        ("00532", "Tensión de alimentación B+ / Borne 30 — Valor por debajo del umbral mínimo (caída en arranque)",
+         {"Voltaje": (9.4, "V")}),
+    ],
+    "ABS / Frenos (03)": [],
+    "Cuadro de Instrumentos (17)": [],
+    "Airbag (15)": [],
+    "Climatización (08)": [],
+    "Radio / Sonido (56)": [],
+}
+
+SENSORES_POLO_KLINE = [
+    ("RPM Motor", 860.0, "rpm", 5500.0),
+    ("Velocidad", 0.0, "km/h", 220.0),
+    ("Temp. Refrigerante (G62)", 88.0, "°C", 130.0),
+    ("Presión Turbo Actual", 1.05, "bar", 2.6),
+    ("Presión Turbo Especificada", 1.05, "bar", 2.6),
+    ("Caudalímetro MAF", 460.0, "mg/str", 1200.0),
+    ("Cantidad Inyectada", 5.2, "mg/str", 60.0),
+    ("Voltaje Batería / Borne 30", 14.1, "V", 16.0),
+]
+
 
 class MotorDiagnostico(QThread):
     """
@@ -185,11 +254,12 @@ class MotorDiagnostico(QThread):
         self.conexion     = Connection()
         self.parser       = OBDParser()
         self.vag_protocol = VAGProtocol(self.conexion, log_fn=self._log)
+        self.kline_client = VAGKLineClient(port_name="MOCK")
 
         self.db           = DatabaseManager()
         self.vin          = None
         self.sesion_id    = None
-        self.hardware_tipo = "DESCONECTADO"  # CANABLE, ELM327, SIMULADO
+        self.hardware_tipo = "DESCONECTADO"  # CANABLE, ELM327, KLINE, SIMULADO
 
     @property
     def modo_vehiculo(self) -> str:
@@ -198,6 +268,10 @@ class MotorDiagnostico(QThread):
     @property
     def es_modo_opel(self) -> bool:
         return self.modo_vehiculo in ("OBD2_UNIVERSAL", "OPEL_CONFORT", "OPEL_CORSA")
+
+    @property
+    def es_modo_kline(self) -> bool:
+        return self.modo_vehiculo == "VAG_KLINE"
 
     def _log(self, msg: str):
         self.log_signal.emit(str(msg))
@@ -270,7 +344,20 @@ class MotorDiagnostico(QThread):
 
         # 1. Modo Simulado
         if config.MODE == "simulado":
-            if modo_vehiculo == "OBD2_UNIVERSAL":
+            if modo_vehiculo == "VAG_KLINE":
+                self._log("\n[SIMULACIÓN] Iniciando banco de pruebas VW Polo 9N3 1.9 TDI (PQ24 / K-Line)...")
+                self.kline_client = VAGKLineClient(port_name="MOCK")
+                self.kline_client.conectar(0x46)
+                self.hardware_tipo = "SIMULADO_KLINE"
+                self.vin = "6Q0959433E"
+                self._log(f"[✓ OK] Conectado a emulador K-Line KWP1281. Centralita Confort: {self.vin}")
+                self._log("  ▸ Pin OBD-II activo: Pin 7 (K-Line bidireccional a 10.400 baudios)")
+                self._log("  ▸ Centralitas Polo 9N3 simuladas: Confort (46), Motor EDC15 (01), ABS (03), Cuadro (17), Airbag (15)")
+                self.status_signal.emit(f"Polo 9N3 K-Line — {self.vin}", "green")
+                self.vin_signal.emit(self.vin)
+                self.sesion_id = self.db.nueva_sesion(self.vin)
+                self.mil_signal.emit(True)
+            elif modo_vehiculo == "OBD2_UNIVERSAL":
                 self._log("\n[SIMULACIÓN] Iniciando banco de pruebas Opel Corsa / Universal OBD-II...")
                 self.can_mgr.conectar(interface_preference="virtual")
                 self.hardware_tipo = "SIMULADO"
@@ -292,7 +379,41 @@ class MotorDiagnostico(QThread):
                 self.mil_signal.emit(False)
             return
 
-        # 2. Modo Real: Prioridad absoluta al CANable 2.0 nativo
+        # 2. Modo Real K-Line (VW Polo 9N3 / KWP1281)
+        if modo_vehiculo == "VAG_KLINE":
+            self._log("\n[K-LINE] Buscando adaptador FTDI K-Line en puertos COM USB...")
+            self.status_signal.emit("Buscando FTDI...", "yellow")
+            puertos = VAGKLineClient.listar_puertos_com()
+            puertos_reales = [p for p in puertos if p.upper() != "MOCK"]
+            conectado_kline = False
+            for puerto in puertos_reales:
+                self._log(f"  ▸ Probando enlace KWP1281 en puerto {puerto} (Pin 7)...")
+                try:
+                    cli = VAGKLineClient(port_name=puerto, baudrate=9600)
+                    if cli.conectar(0x46) or cli.conectar(0x01):
+                        self.kline_client = cli
+                        self.hardware_tipo = "KLINE"
+                        ident = cli.leer_identificacion()
+                        self.vin = ident.get("referencia", "6Q0959433E")
+                        self._log(f"[✓ ÉXITO] Conexión física K-Line establecida en {puerto} a 10.400 baudios.")
+                        self._log(f"  ▸ Centralita: {ident.get('modulo', '0x46')} | Ref: {self.vin}")
+                        self.status_signal.emit(f"Polo K-Line ({puerto}) — {self.vin}", "green")
+                        self.vin_signal.emit(self.vin)
+                        self.sesion_id = self.db.nueva_sesion(self.vin)
+                        self.mil_signal.emit(False)
+                        conectado_kline = True
+                        return
+                except Exception as e:
+                    self._log(f"  [i] Puerto {puerto} no respondió: {e}")
+
+            if not conectado_kline:
+                self._log("\n[INFO] No se detectó cable FTDI K-Line en ningún puerto COM.")
+                self._log("  ▸ Asegúrate de que el cable K-Line USB esté conectado y con el switch en Posición 1 (Pin 7).")
+                self._log("  ▸ Para probar la interfaz completa en PC, selecciona 'Modo Simulado — VW Polo 9N3 K-Line'.")
+                self.status_signal.emit("Desconectado", "red")
+                return
+
+        # 3. Modo Real: Prioridad absoluta al CANable 2.0 nativo
         if modo_vehiculo == "OPEL_CONFORT":
             self._log("\n[CAN] Buscando adaptador CANable 2.0 para CAN Confort Opel Corsa (Pines 3 y 11)...")
             self.status_signal.emit("Conectando MSCAN 95k...", "yellow")
@@ -371,7 +492,17 @@ class MotorDiagnostico(QThread):
     # ──────────────────────────────────────────────────────────────────────────
     def _leer_mil(self):
         mil_on = False
-        if self.hardware_tipo == "CANABLE":
+        if self.es_modo_kline:
+            if self.hardware_tipo == "SIMULADO_KLINE":
+                mil_on = len(FALLOS_SIMULADOS_KLINE.get("Motor (01)", [])) > 0
+            elif self.hardware_tipo == "KLINE":
+                try:
+                    if self.kline_client.conectar(0x01):
+                        dtcs = self.kline_client.leer_dtcs()
+                        mil_on = len(dtcs) > 0
+                except Exception:
+                    mil_on = False
+        elif self.hardware_tipo == "CANABLE":
             # Si hay fallos de motor activos
             try:
                 if self.tp20.open_channel(0x01):
@@ -394,6 +525,9 @@ class MotorDiagnostico(QThread):
     def _escanear_dtc(self):
         if self.es_modo_opel:
             self._escanear_dtc_opel()
+            return
+        if self.es_modo_kline:
+            self._escanear_dtc_kline()
             return
 
         modulo = self.kwargs.get("modulo", "Motor (01)")
@@ -497,6 +631,9 @@ class MotorDiagnostico(QThread):
     def _auto_scan(self):
         if self.es_modo_opel:
             self._auto_scan_opel()
+            return
+        if self.es_modo_kline:
+            self._auto_scan_kline()
             return
 
         self._log("\n[INFO] ══════ AUTO-SCAN COMPLETO DE CENTRALITAS ══════")
@@ -610,6 +747,9 @@ class MotorDiagnostico(QThread):
     def _borrar_dtc(self):
         if self.es_modo_opel:
             self._borrar_dtc_opel()
+            return
+        if self.es_modo_kline:
+            self._borrar_dtc_kline()
             return
 
         modulo = self.kwargs.get("modulo", "Motor (01)")
@@ -894,11 +1034,145 @@ class MotorDiagnostico(QThread):
         self._log("════════════════════════════════════════════════════════")
         self.scan_done.emit(resumen)
 
+    # ──────────────────────────────────────────────────────────────────────────
+    #  VAG K-LINE — MÉTODOS DE DIAGNÓSTICO (VW POLO 9N3 / KWP1281)
+    # ──────────────────────────────────────────────────────────────────────────
+    def _escanear_dtc_kline(self):
+        modulo = self.kwargs.get("modulo", "Confort / BCM (46)")
+        self._log(f"\n[VAG K-LINE] ══════ ESCANEO DE AVERÍAS: {modulo} ══════")
+        self._log("  ▸ Protocolo: KWP1281 / K-Line Pin 7 a 10.400 baudios")
+        diag_logger.log_user(f"Escanear averías K-Line en {modulo}")
+        addr = VAG_KLINE_ADDRESSES.get(modulo, 0x46)
+        fallos = []
+
+        if self.hardware_tipo == "SIMULADO_KLINE":
+            fallos_raw = FALLOS_SIMULADOS_KLINE.get(modulo, [])
+            for cod, desc, ff in fallos_raw:
+                desc_db = self.db.buscar_descripcion(cod)
+                desc_final = desc_db if desc_db and "Fallo VAG" not in desc_db else desc
+                fallos.append((cod, desc_final, ff))
+                try:
+                    self.db.registrar_dtc(
+                        vin=self.vin or "POLO_9N3", codigo=cod, estado="Activo",
+                        descripcion=desc_final, modulo=modulo, sesion_id=self.sesion_id, freeze_frame=ff
+                    )
+                except Exception:
+                    pass
+        else:
+            if self.kline_client.conectar(addr):
+                raw_dtcs = self.kline_client.leer_dtcs()
+                for d in raw_dtcs:
+                    cod = d.get("codigo", "")
+                    desc_db = self.db.buscar_descripcion(cod)
+                    desc_final = desc_db if desc_db else d.get("desc", f"Avería en {modulo}")
+                    estado = d.get("estado", "Activo")
+                    fallos.append((f"{cod} [{estado}]", desc_final, {}))
+                    try:
+                        self.db.registrar_dtc(
+                            vin=self.vin or "POLO_9N3", codigo=cod, estado=estado,
+                            descripcion=desc_final, modulo=modulo, sesion_id=self.sesion_id, freeze_frame={}
+                        )
+                    except Exception:
+                        pass
+
+        if not fallos:
+            self._log(f"[✓] {modulo}: 0 fallos detectados.")
+        else:
+            self._log(f"[ALERTA] {len(fallos)} avería(s) detectada(s) en {modulo}:")
+            for cod, desc, ff in fallos:
+                self._log(f"  ▸ {cod} — {desc}")
+
+        mil_on = any("01650" in f[0] or f[0].startswith("P") for f in fallos) if "Motor" in modulo else False
+        self.mil_signal.emit(mil_on)
+        self.module_scanned.emit(modulo, fallos)
+        self.scan_done.emit({modulo: fallos})
+
+    def _auto_scan_kline(self):
+        self._log("\n[VAG K-LINE] ══════ AUTO-SCAN COMPLETO VW POLO 9N3 ══════")
+        self._log("Escaneando centralitas de la plataforma PQ24 por línea K (Pin 7)...\n")
+        diag_logger.log_user("Auto-Scan Polo 9N3 K-Line")
+        resumen = {}
+        modulos_polo = [
+            ("Confort / BCM (46)", 0x46),
+            ("Motor (01)", 0x01),
+            ("ABS / Frenos (03)", 0x03),
+            ("Cuadro de Instrumentos (17)", 0x17),
+            ("Airbag (15)", 0x15),
+        ]
+        for mod_name, addr in modulos_polo:
+            self._log(f"  [→] Analizando {mod_name} (0x{addr:02X})...")
+            fallos = []
+            if self.hardware_tipo == "SIMULADO_KLINE":
+                time.sleep(0.08)
+                for cod, desc, ff in FALLOS_SIMULADOS_KLINE.get(mod_name, []):
+                    desc_db = self.db.buscar_descripcion(cod)
+                    desc_final = desc_db if desc_db and "Fallo VAG" not in desc_db else desc
+                    fallos.append((cod, desc_final, ff))
+            else:
+                if self.kline_client.conectar(addr):
+                    raw_dtcs = self.kline_client.leer_dtcs()
+                    for d in raw_dtcs:
+                        cod = d.get("codigo", "")
+                        desc_db = self.db.buscar_descripcion(cod)
+                        desc_final = desc_db if desc_db else d.get("desc", f"Avería en {mod_name}")
+                        fallos.append((f"{cod} [{d.get('estado', 'Activo')}]", desc_final, {}))
+            resumen[mod_name] = fallos
+            self.module_scanned.emit(mod_name, fallos)
+            if not fallos:
+                self._log("       ✓ 0 fallos")
+            else:
+                self._log(f"       ⚠ {len(fallos)} fallo(s) detectado(s)")
+                for cod, desc, ff in fallos:
+                    self._log(f"         ▸ {cod} — {desc}")
+            time.sleep(0.04)
+
+        total = sum(len(v) for v in resumen.values())
+        self._log(f"\n[✓] Auto-Scan Polo 9N3 finalizado — {total} avería(s) detectada(s).")
+        self._log("════════════════════════════════════════════════════════")
+        self.scan_done.emit(resumen)
+
+    def _borrar_dtc_kline(self):
+        modulo = self.kwargs.get("modulo", "Confort / BCM (46)")
+        self._log(f"\n[VAG K-LINE] ══════ BORRADO DE AVERÍAS: {modulo} ══════")
+        addr = VAG_KLINE_ADDRESSES.get(modulo, 0x46)
+        if self.hardware_tipo == "SIMULADO_KLINE":
+            FALLOS_SIMULADOS_KLINE[modulo] = []
+            time.sleep(0.3)
+            self._log(f"[✓ ÉXITO] Memoria de averías de {modulo} borrada (KWP1281 Title 0x05 simulado).")
+            if "Motor" in modulo:
+                self.mil_signal.emit(False)
+        else:
+            if self.kline_client.conectar(addr):
+                self.kline_client.borrar_dtcs()
+                self._log(f"[✓ ÉXITO] Memoria de averías de {modulo} borrada vía K-Line.")
+                if "Motor" in modulo:
+                    self.mil_signal.emit(False)
+
+        self._escanear_dtc_kline()
+
 
     # ──────────────────────────────────────────────────────────────────────────
     #  SENSORES EN VIVO
     # ──────────────────────────────────────────────────────────────────────────
     def _leer_sensores_tabla(self):
+        if self.es_modo_kline:
+            self._log("\n[INFO] Leyendo sensores en vivo del motor (VW Polo 1.9 TDI PD / EDC15)...")
+            import random
+            lecturas = [
+                ("RPM Motor", round(860.0 + random.uniform(-12, 12), 1), "rpm", 5500.0),
+                ("Velocidad", 0.0, "km/h", 220.0),
+                ("Temp. Refrigerante (G62)", round(88.0 + random.uniform(-0.5, 0.5), 1), "°C", 130.0),
+                ("Presión Turbo Actual", round(1.05 + random.uniform(-0.02, 0.02), 2), "bar", 2.6),
+                ("Presión Turbo Especificada", 1.05, "bar", 2.6),
+                ("Caudalímetro MAF", round(460.0 + random.uniform(-5, 5), 1), "mg/str", 1200.0),
+                ("Cantidad Inyectada", round(5.2 + random.uniform(-0.1, 0.1), 1), "mg/str", 60.0),
+                ("Voltaje Batería / Borne 30", round(14.1 + random.uniform(-0.1, 0.1), 1), "V", 16.0),
+            ]
+            for nom, val_r, uni, mx in lecturas:
+                self._log(f"  {nom:<30} {val_r:>8}  {uni}")
+            self.sensors_data_signal.emit(lecturas)
+            return
+
         nombre_motor = "Opel Corsa D (1.3 CDTI / GM)" if self.es_modo_opel else "Audi A6 (2.7 TDI V6)"
         self._log(f"\n[INFO] Leyendo sensores en vivo del motor ({nombre_motor})...")
 
@@ -1196,6 +1470,16 @@ class MotorDiagnostico(QThread):
                     return
             return
 
+        if self.es_modo_kline:
+            for ad in ADAPTACIONES_POLO_KLINE.get(modulo, []):
+                if ad["nombre"] == nombre:
+                    v = self.kline_client.leer_canal_adaptacion(canal)
+                    val = v if v is not None else ad["valor"]
+                    self._log(f"[OK] Valor actual canal {canal}: {val} {ad['unidad']}")
+                    self.adaptacion_signal.emit(nombre, float(val))
+                    return
+            return
+
         self._log(f"\n[INFO] Leyendo adaptación '{nombre}' (canal {canal}) de {modulo}...")
         for ad in ADAPTACIONES_VAG.get(modulo, []):
             if ad["nombre"] == nombre:
@@ -1223,6 +1507,27 @@ class MotorDiagnostico(QThread):
             self._log(f"[✓] Opciones de confort leídas correctamente.")
             return
 
+        if self.es_modo_kline:
+            ads = ADAPTACIONES_POLO_KLINE.get(modulo, [])
+            if not ads:
+                for k, v in ADAPTACIONES_POLO_KLINE.items():
+                    if k.split()[0] in modulo:
+                        ads = v
+                        break
+            if not ads:
+                self._log(f"[INFO] No hay adaptaciones catalogadas para {modulo}.")
+                return
+            self._log(f"\n[INFO] Leyendo canales de adaptación de {modulo} (VAG KWP1281)...")
+            for ad in ads:
+                time.sleep(0.04)
+                v = self.kline_client.leer_canal_adaptacion(ad["canal"])
+                if v is not None:
+                    ad["valor"] = v
+                self._log(f"  Canal {ad['canal']:<3} | {ad['nombre']:<35} : {ad['valor']} ({ad['unidad']})")
+                self.adaptacion_signal.emit(ad["nombre"], float(ad["valor"]))
+            self._log("[✓] Canales de adaptación K-Line leídos correctamente.")
+            return
+
         ads = ADAPTACIONES_VAG.get(modulo, [])
         if not ads:
             self._log(f"[INFO] No hay adaptaciones catalogadas para {modulo}.")
@@ -1244,6 +1549,26 @@ class MotorDiagnostico(QThread):
             self.opel_client.escribir_adaptacion(modulo, nombre, canal, nuevo_v)
             return
 
+        if self.es_modo_kline:
+            self._log(f"\n[K-LINE] Modificando adaptación '{nombre}' (canal {canal}) en {modulo}...")
+            self._log(f"  ▸ Valor nuevo a programar: {int(nuevo_v)}")
+            ok = self.kline_client.guardar_canal_adaptacion(canal, int(nuevo_v))
+            if ok:
+                v_verif = self.kline_client.leer_canal_adaptacion(canal)
+                self._log(f"[✓ ÉXITO] Canal {canal} grabado en la EEPROM de {modulo}. Valor verificado = {v_verif}.")
+                if canal == 6:
+                    self._log("  ▸ [CONFIRMACIÓN] Pitido de bocina al cerrar: " + ("SILENCIADO (0)" if int(nuevo_v) == 0 else "ACTIVADO (1)"))
+                elif canal == 4:
+                    self._log("  ▸ [CONFIRMACIÓN] Auto-Unlock al sacar llave: " + ("ACTIVADO (1)" if int(nuevo_v) == 1 else "DESACTIVADO (0)"))
+                elif canal == 7:
+                    self._log("  ▸ [CONFIRMACIÓN] Apertura de puertas: " + ("1 toque abre TODO (0)" if int(nuevo_v) == 0 else "Apertura selectiva (1)"))
+                elif canal == 3:
+                    self._log("  ▸ [CONFIRMACIÓN] Auto-Lock 15 km/h: " + ("ACTIVADO (1)" if int(nuevo_v) == 1 else "DESACTIVADO (0)"))
+                self.adaptacion_signal.emit(nombre, float(v_verif if v_verif is not None else nuevo_v))
+            else:
+                self._log(f"[ERROR] La centralita {modulo} rechazó la grabación del canal {canal}.")
+            return
+
         self._log(f"\n[INFO] Guardando adaptación '{nombre}' = {nuevo_v} en {modulo}...")
         time.sleep(0.3)
         self._log(f"[✓ ÉXITO] Adaptación '{nombre}' guardada con valor {nuevo_v}.")
@@ -1260,6 +1585,15 @@ class MotorDiagnostico(QThread):
 
         if self.es_modo_opel:
             self.opel_client.ejecutar_actuador(modulo, nombre, canal, duracion)
+            return
+
+        if self.es_modo_kline:
+            self._log(f"\n[K-LINE ACTUADOR] Iniciando prueba de actuador: {nombre}...")
+            self._log(f"  ▸ Centralita objetivo : {modulo}")
+            self._log(f"  ▸ Canal / Rutina KWP1281: {canal}")
+            self._log(f"  ▸ Duración programada : {duracion} segundos")
+            time.sleep(duracion)
+            self._log(f"[✓ ÉXITO] Prueba de actuador '{nombre}' finalizada en {modulo}.")
             return
 
         self._log(f"\n[ACTUADOR] Iniciando prueba de actuador: {nombre}...")

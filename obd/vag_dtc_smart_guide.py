@@ -32,7 +32,7 @@ GUIA_DTC_VAG: Dict[str, dict] = {
         "componente": "Detonador Airbag Conductor / Volante (N95)",
         "ubicacion": "En el centro del volante, detrás del módulo del claxon y conectado al anillo de la columna de dirección.",
         "causas_tipicas": "Pistas flex rotas o desgastadas en el Anillo de Airbag / Carrete de Dirección (Clockspring) tras muchos giros de volante.",
-        "comprobacion": "1. Comprobar si los mandos del volante o la bocina también fallan a ratos al girar.\n2. Si la resistencia es > 5 Ω constante independientemente del giro, sustituir el anillo de airbag (módulo 16 / anillo de dirección).",
+        "comprobacion": "1. Comprobar si los mandos del volante o la bocina también fallan a ratos al girar.\n2. Si la resistencia es > 5 Ohm constante independientemente del giro, sustituir el anillo de airbag (módulo 16 / anillo de dirección).",
     },
     "00589": {
         "sistema": "Airbags / Seguridad Pasiva (Módulo 15)",
@@ -62,14 +62,14 @@ GUIA_DTC_VAG: Dict[str, dict] = {
         "componente": "Bujía de Precalentamiento / Calentador Cilindro 1 (Q10)",
         "ubicacion": "Culata delantera derecha (Banco 1, cilindro frontal más cercano al radiador).",
         "causas_tipicas": "Resistencia del calentador quemada internamente (abierta) o pipeta de conexión sulfatada.",
-        "comprobacion": "1. Medir con polímetro en resistencia entre la punta del calentador y masa: debe dar 0.5 a 1.2 Ω. Si da infinito, está fundido.\n2. Sustituir aplicando par de apriete exacto (15-18 Nm) con motor tibio.",
+        "comprobacion": "1. Medir con polímetro en resistencia entre la punta del calentador y masa: debe dar 0.5 a 1.2 Ohm. Si da infinito, está fundido.\n2. Sustituir aplicando par de apriete exacto (15-18 Nm) con motor tibio.",
     },
     "P0672": {
         "sistema": "Gestión Motor V6 TDI (Módulo 01)",
         "componente": "Bujía de Precalentamiento / Calentador Cilindro 2 (Q11)",
         "ubicacion": "Culata derecha (Banco 1, cilindro central).",
         "causas_tipicas": "Calentador quemado o resistencia interna degradada.",
-        "comprobacion": "Medir resistencia con polímetro (nominal ~0.8 Ω). Sustituir si supera los 2.5 Ω o da circuito abierto.",
+        "comprobacion": "Medir resistencia con polímetro (nominal ~0.8 Ohm). Sustituir si supera los 2.5 Ohm o da circuito abierto.",
     },
     "P0673": {
         "sistema": "Gestión Motor V6 TDI (Módulo 01)",
@@ -209,6 +209,33 @@ GUIA_DTC_VAG: Dict[str, dict] = {
         "ubicacion": "Bajo la consola central o en el lateral derecho del maletero.",
         "causas_tipicas": "El coche está aparcado en una cuesta muy inclinada, suspensión neumática bajando lentamente por la noche, o sensor de aceleración descalibrado.",
         "comprobacion": "Pulsar el botón de desactivación de remolque (en la puerta del conductor) al aparcar para comprobar si el sensor es el causante.",
+    },
+
+    # ── ALIMENTACIÓN Y TENSIONES GENERALES VAG / POLO 9N3 ──
+    "00532": {
+        "sistema": "Alimentación Eléctrica General (Módulos 01 / 03 / 17 / 46)",
+        "componente": "Tensión de Alimentación B+ / Borne 30 (Alimentación Directa de Batería)",
+        "ubicacion": "Batería, bornes de conexión y caja de fusibles principal atornillada sobre la tapa de la batería (vano motor).",
+        "causas_tipicas": "Caída severa de tensión por debajo de 9.6V al accionar el motor de arranque (batería degradada o sulfatada). En el VW Polo 9N3 y plataforma PQ24, es muy común que se parta la pletina metálica de los fusibles de chapa sobre la batería por vibraciones del motor TDI.",
+        "comprobacion": "1. Medir tensión en reposo con motor apagado (> 12.5V).\n2. Medir caída de tensión con polímetro durante el arranque (si cae de 9.8V la batería no tiene fuerza).\n3. Inspeccionar visualmente las pletinas de chapa de los fusibles del vano motor en busca de microfisuras o sulfatación.",
+    },
+
+    # ── GESTIÓN MOTOR 1.9 TDI PD (CALENTADORES) ──
+    "01650": {
+        "sistema": "Gestión Motor 1.9 TDI PD (Módulo 01)",
+        "componente": "Bujía Incandescente Cilindro 2 (Q11) — Calentador de Arranque (P0672)",
+        "ubicacion": "En la culata del motor 1.9 TDI, cilindro número 2 (segundo contando de izquierda a derecha desde la correa de distribución).",
+        "causas_tipicas": "Resistencia interna del calentador cortada por desgaste térmico. Provoca arranque dificultoso en frío, humo blanco/grisáceo los primeros segundos y cabeceo del motor al encender.",
+        "comprobacion": "1. Retirar con cuidado el puente de goma que alimenta los calentadores.\n2. Con polímetro en escala de ohmios (Ohm), medir entre la punta roscada del calentador y la masa del motor (culata). Valor correcto: 0.6 a 1.2 Ohm. Si da circuito abierto (OL), sustituir la bujía (apretar a 15 Nm máx con motor frío).\n3. Comprobar que llegan 12V al capuchón durante los 3 segundos tras poner contacto.",
+    },
+
+    # ── ELEVALUNAS Y CONFORT POLO 9N3 ──
+    "00932": {
+        "sistema": "Carrocería y Confort (Módulo 46)",
+        "componente": "Motor Elevalunas Eléctrico Lado Conductor (V147)",
+        "ubicacion": "En el interior del panel de la puerta del conductor, atornillado a la chapa intermedia del elevalunas.",
+        "causas_tipicas": "Pérdida del ajuste básico de fin de carrera tras desconectar la batería o sustituir la cerradura/batería. El cristal pierde la función de subida automática 'confort' a 1 toque.",
+        "comprobacion": "1. Subir la ventanilla con el pulsador y mantenerlo pulsado arriba durante 3 segundos una vez cerrado del todo.\n2. Bajar la ventanilla del todo y mantener 3 segundos pulsado abajo.\n3. Probar si la subida automática a 1 toque se ha rearmado y borrar la avería.",
     },
 }
 

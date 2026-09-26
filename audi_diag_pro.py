@@ -18,7 +18,8 @@ from PyQt6.QtGui import QFont, QColor, QPainter, QPen, QPolygonF
 from ui.estilos import ESTILO_PRINCIPAL
 from ui.controlador import (
     MotorDiagnostico, ADAPTACIONES_VAG, ACTUADORES_VAG, TP20_MODULE_ADDR,
-    ADAPTACIONES_OPEL, ACTUADORES_OPEL, OPEL_MODULES_CONFIG, CATALOGO_CONFORT_OPEL
+    ADAPTACIONES_OPEL, ACTUADORES_OPEL, OPEL_MODULES_CONFIG, CATALOGO_CONFORT_OPEL,
+    ADAPTACIONES_POLO_KLINE, ACTUADORES_POLO_KLINE, POLO_9N3_CONFORT_CHANNELS
 )
 from gestion.report_generator import ReportGenerator
 from gestion.database_manager import DatabaseManager
@@ -296,6 +297,10 @@ class MainWindow(QMainWindow):
     def es_modo_opel(self) -> bool:
         return getattr(config, "VEHICLE_MODE", "VAG") in ("OBD2_UNIVERSAL", "OPEL_CONFORT", "OPEL_CORSA")
 
+    @property
+    def es_modo_kline(self) -> bool:
+        return getattr(config, "VEHICLE_MODE", "VAG") == "VAG_KLINE"
+
     # ══════════════════════════════════════════════════════════════════════════
     #  NAVEGACIÓN
     # ══════════════════════════════════════════════════════════════════════════
@@ -380,9 +385,9 @@ class MainWindow(QMainWindow):
         lbl_tag.setStyleSheet("color: #FF0026; font-size: 11px; font-weight: 900; letter-spacing: 1.5px;")
         fila_tag.addWidget(lbl_tag)
         fila_tag.addStretch()
-        lbl_red = QLabel("BUS CAN: 500 kbps")
-        lbl_red.setStyleSheet("color: #94A3B8; font-size: 11px; font-weight: 800; font-family: Consolas;")
-        fila_tag.addWidget(lbl_red)
+        self.lbl_red = QLabel("BUS CAN: 500 kbps")
+        self.lbl_red.setStyleSheet("color: #94A3B8; font-size: 11px; font-weight: 800; font-family: Consolas;")
+        fila_tag.addWidget(self.lbl_red)
         card_lyt.addLayout(fila_tag)
 
         card_lyt.addWidget(self._separador())
@@ -438,9 +443,9 @@ class MainWindow(QMainWindow):
         self.lbl_sesion_num = QLabel("—")
         self.lbl_sesion_num.setStyleSheet("color: #FF0026; font-size: 20px; font-weight: 900; font-family: Consolas;")
         col_sesion.addWidget(self.lbl_sesion_num)
-        lbl_protocolo_sub = QLabel("TP 2.0 CAN Nativo (KWP2000)")
-        lbl_protocolo_sub.setStyleSheet("color: #94A3B8; font-size: 11px; font-weight: 600;")
-        col_sesion.addWidget(lbl_protocolo_sub)
+        self.lbl_protocolo_sub = QLabel("TP 2.0 CAN Nativo (KWP2000)")
+        self.lbl_protocolo_sub.setStyleSheet("color: #94A3B8; font-size: 11px; font-weight: 600;")
+        col_sesion.addWidget(self.lbl_protocolo_sub)
         fila_telemetria.addLayout(col_sesion)
 
         card_lyt.addLayout(fila_telemetria)
@@ -459,10 +464,12 @@ class MainWindow(QMainWindow):
 
         self.combo_modo = QComboBox()
         self.combo_modo.addItems([
-            "🔌  Audi / Grupo VAG — CANable 2.0 (Nativo 500 kbps TP 2.0 / KWP2000)",
+            "🔌  Audi A6 C6 — CANable 2.0 (Nativo 500 kbps TP 2.0 / KWP2000)",
+            "🚗  VW Polo (2007) — Cable K-Line FTDI (Pin 7 KWP1281)",
             "🚗  Opel Corsa — CAN Motor HSCAN (Pines 6 y 14 - 500 kbps)",
             "🛋️  Opel Corsa — CAN Confort MSCAN (Pines 3 y 11 - 95 kbps)",
             "💻  Modo Simulado — Audi A6 C6 (Sin cable conectado)",
+            "💻  Modo Simulado — VW Polo 9N3 K-Line (Sin cable conectado)",
             "💻  Modo Simulado — Opel Corsa D (Sin cable conectado)",
         ])
         self.combo_modo.currentIndexChanged.connect(self._al_cambiar_modo_vehiculo)
@@ -1438,6 +1445,13 @@ class MainWindow(QMainWindow):
                     if k.split()[0] in modulo:
                         ads = v
                         break
+        elif self.es_modo_kline:
+            ads = ADAPTACIONES_POLO_KLINE.get(modulo, [])
+            if not ads:
+                for k, v in ADAPTACIONES_POLO_KLINE.items():
+                    if k.split()[0] in modulo:
+                        ads = v
+                        break
         else:
             ads = ADAPTACIONES_VAG.get(modulo, [])
         if not ads:
@@ -1549,6 +1563,13 @@ class MainWindow(QMainWindow):
             acts = ACTUADORES_OPEL.get(modulo, [])
             if not acts:
                 for k, v in ACTUADORES_OPEL.items():
+                    if k.split()[0] in modulo:
+                        acts = v
+                        break
+        elif self.es_modo_kline:
+            acts = ACTUADORES_POLO_KLINE.get(modulo, [])
+            if not acts:
+                for k, v in ACTUADORES_POLO_KLINE.items():
                     if k.split()[0] in modulo:
                         acts = v
                         break
@@ -2681,25 +2702,99 @@ class MainWindow(QMainWindow):
     #  ACCIONES → WORKER
     # ══════════════════════════════════════════════════════════════════════════
     def _al_cambiar_modo_vehiculo(self, idx: int):
-        if idx == 1:
-            config.VEHICLE_MODE = "OBD2_UNIVERSAL"
+        if idx == 0:
+            config.VEHICLE_MODE = "VAG"
+            config.MODE = "real"
+        elif idx == 1:
+            config.VEHICLE_MODE = "VAG_KLINE"
             config.MODE = "real"
         elif idx == 2:
+            config.VEHICLE_MODE = "OBD2_UNIVERSAL"
+            config.MODE = "real"
+        elif idx == 3:
             config.VEHICLE_MODE = "OPEL_CONFORT"
             config.MODE = "real"
         elif idx == 4:
-            config.VEHICLE_MODE = "OBD2_UNIVERSAL"
-            config.MODE = "simulado"
-        elif idx == 3:
             config.VEHICLE_MODE = "VAG"
+            config.MODE = "simulado"
+        elif idx == 5:
+            config.VEHICLE_MODE = "VAG_KLINE"
+            config.MODE = "simulado"
+        elif idx == 6:
+            config.VEHICLE_MODE = "OBD2_UNIVERSAL"
             config.MODE = "simulado"
         else:
             config.VEHICLE_MODE = "VAG"
             config.MODE = "real"
 
-        if idx in (1, 2, 4):  # Modos Opel
+        if idx in (1, 5):  # Modos VW Polo 9N3 K-Line
+            if hasattr(self, "lbl_vin"):
+                self.lbl_vin.setText("6Q0959433E (VW Polo 9N3)")
+            if hasattr(self, "lbl_vehiculo_desc"):
+                self.lbl_vehiculo_desc.setText("Volkswagen Polo 9N3 1.9 TDI (101 CV AXR/ATD) · 2007 (PQ24)")
+            if hasattr(self, "lbl_protocolo_sub"):
+                self.lbl_protocolo_sub.setText("K-Line Pin 7 · KWP1281 / KWP2000")
+            if hasattr(self, "lbl_red"):
+                self.lbl_red.setText("K-LINE: 10.4 kbps")
+
+            self._coding_actual_leido = "00067"
+            if hasattr(self, "txt_coding_actual"):
+                self.txt_coding_actual.setText(self._coding_actual_leido)
+            if hasattr(self, "txt_coding_nuevo"):
+                self.txt_coding_nuevo.setText(self._coding_actual_leido)
+
+            modulos_polo_dtc = [
+                "Confort / BCM (46)",
+                "Motor (01)",
+                "ABS / Frenos (03)",
+                "Cuadro de Instrumentos (17)",
+                "Airbag (15)",
+                "Climatización (08)",
+                "Radio / Sonido (56)",
+            ]
+            modulos_polo_actu = list(ACTUADORES_POLO_KLINE.keys())
+            modulos_polo_adapt = list(ADAPTACIONES_POLO_KLINE.keys())
+
+            if hasattr(self, "combo_dtc"):
+                self.combo_dtc.blockSignals(True)
+                self.combo_dtc.clear()
+                self.combo_dtc.addItems(modulos_polo_dtc)
+                self.combo_dtc.setCurrentText("Confort / BCM (46)")
+                self.combo_dtc.blockSignals(False)
+
+            if hasattr(self, "combo_coding"):
+                self.combo_coding.blockSignals(True)
+                self.combo_coding.clear()
+                self.combo_coding.addItems(["Confort / BCM (46)", "Motor (01)", "Cuadro de Instrumentos (17)", "Airbag (15)"])
+                self.combo_coding.setCurrentText("Confort / BCM (46)")
+                self.combo_coding.blockSignals(False)
+
+            if hasattr(self, "combo_adapt"):
+                self.combo_adapt.blockSignals(True)
+                self.combo_adapt.clear()
+                self.combo_adapt.addItems(modulos_polo_adapt)
+                self.combo_adapt.setCurrentText("Confort / BCM (46)")
+                self.combo_adapt.blockSignals(False)
+                self._rebuild_adaptaciones(self.combo_adapt.currentText())
+
+            if hasattr(self, "combo_actu"):
+                self.combo_actu.blockSignals(True)
+                self.combo_actu.clear()
+                self.combo_actu.addItems(modulos_polo_actu)
+                self.combo_actu.setCurrentText("Confort / BCM (46)")
+                self.combo_actu.blockSignals(False)
+                self._rebuild_actuadores(self.combo_actu.currentText())
+
+        elif idx in (2, 3, 6):  # Modos Opel
             if hasattr(self, "lbl_vin"):
                 self.lbl_vin.setText("W0L0SDL6874086807")
+            if hasattr(self, "lbl_vehiculo_desc"):
+                self.lbl_vehiculo_desc.setText("Opel Corsa D 1.3 CDTI (90 CV Z13DTH) · Confort & Motor")
+            if hasattr(self, "lbl_protocolo_sub"):
+                self.lbl_protocolo_sub.setText("CAN ISO 15765-4 / GMLAN")
+            if hasattr(self, "lbl_red"):
+                self.lbl_red.setText("BUS CAN: 500k / 95k")
+
             self._coding_actual_leido = "06 05 02 00"
             if hasattr(self, "txt_coding_actual"):
                 self.txt_coding_actual.setText(self._coding_actual_leido)
@@ -2714,7 +2809,7 @@ class MainWindow(QMainWindow):
                 self.combo_dtc.blockSignals(True)
                 self.combo_dtc.clear()
                 self.combo_dtc.addItems(modulos_opel_dtc)
-                if idx == 2:
+                if idx == 3:
                     self.combo_dtc.setCurrentText("BCM Confort / Carrocería")
                 self.combo_dtc.blockSignals(False)
 
@@ -2722,7 +2817,7 @@ class MainWindow(QMainWindow):
                 self.combo_coding.blockSignals(True)
                 self.combo_coding.clear()
                 self.combo_coding.addItems(["BCM Confort / Carrocería", "IPC Cuadro Instrumentos", "Motor / ECM"])
-                if idx == 2:
+                if idx == 3:
                     self.combo_coding.setCurrentText("BCM Confort / Carrocería")
                 self.combo_coding.blockSignals(False)
                 self._cargar_catalogo_confort(self.combo_coding.currentText())
@@ -2731,7 +2826,7 @@ class MainWindow(QMainWindow):
                 self.combo_adapt.blockSignals(True)
                 self.combo_adapt.clear()
                 self.combo_adapt.addItems(modulos_opel_adapt)
-                if idx == 2:
+                if idx == 3:
                     self.combo_adapt.setCurrentText("BCM Confort / Carrocería")
                 self.combo_adapt.blockSignals(False)
                 self._rebuild_adaptaciones(self.combo_adapt.currentText())
@@ -2740,16 +2835,23 @@ class MainWindow(QMainWindow):
                 self.combo_actu.blockSignals(True)
                 self.combo_actu.clear()
                 self.combo_actu.addItems(modulos_opel_actu)
-                if idx == 2:
+                if idx == 3:
                     self.combo_actu.setCurrentText("BCM Confort / Carrocería")
                 self.combo_actu.blockSignals(False)
                 self._rebuild_actuadores(self.combo_actu.currentText())
 
             self._actualizar_estado_botones_confort()
-        else:  # Audi / VAG
+        else:  # Audi / VAG (0 o 4)
             config.VEHICLE_MODE = "VAG"
             if hasattr(self, "lbl_vin"):
                 self.lbl_vin.setText("WAUZZZ4F000000000")
+            if hasattr(self, "lbl_vehiculo_desc"):
+                self.lbl_vehiculo_desc.setText("Audi A6 C6 2.7 TDI V6 Common Rail (190 CV) · Facelift 2010")
+            if hasattr(self, "lbl_protocolo_sub"):
+                self.lbl_protocolo_sub.setText("TP 2.0 CAN Nativo (KWP2000)")
+            if hasattr(self, "lbl_red"):
+                self.lbl_red.setText("BUS CAN: 500 kbps")
+
             self._coding_actual_leido = ""
             if hasattr(self, "txt_coding_actual"):
                 self.txt_coding_actual.setText("")
@@ -2796,25 +2898,37 @@ class MainWindow(QMainWindow):
             config.MODE = "real"
             config.VEHICLE_MODE = "VAG"
             config.SERIAL_PORT = "AUTO"
-            self.escribir_consola("\n[CONEXIÓN] Modo AUDI / VAG (Cable Real) activado. Buscando adaptador CANable 2.0...")
+            self.escribir_consola("\n[CONEXIÓN] Modo AUDI A6 C6 (CANable 2.0 Real) activado. Buscando adaptador...")
         elif idx == 1:
+            config.MODE = "real"
+            config.VEHICLE_MODE = "VAG_KLINE"
+            config.SERIAL_PORT = "AUTO"
+            self.escribir_consola("\n[CONEXIÓN] Modo VW POLO 9N3 K-LINE (Cable FTDI Real) activado...")
+            self.escribir_consola("  ▸ Protocolo: KWP1281 / K-Line Pin 7 a 10.400 baudios (Slow Init 5 Baud)")
+            self.escribir_consola("  ▸ Bus objetivo: Confort 46, Motor 01, ABS 03, Cuadro 17, Airbag 15")
+        elif idx == 2:
             config.MODE = "real"
             config.VEHICLE_MODE = "OBD2_UNIVERSAL"
             config.SERIAL_PORT = "AUTO"
             self.escribir_consola("\n[CONEXIÓN] Modo OPEL CORSA HSCAN (Pines 6 y 14 - 500 kbps) activado...")
             self.escribir_consola("  ▸ Protocolo: ISO 15765-4 (CAN 11-bit 500 kbps)")
             self.escribir_consola("  ▸ Bus objetivo: Motor / ECM, ABS/ESP, Dirección")
-        elif idx == 2:
+        elif idx == 3:
             config.MODE = "real"
             config.VEHICLE_MODE = "OPEL_CONFORT"
             config.SERIAL_PORT = "AUTO"
             self.escribir_consola("\n[CONEXIÓN] Modo OPEL CORSA MSCAN (Pines 3 y 11 - 95 kbps) activado...")
             self.escribir_consola("  ▸ Protocolo: GM GMLAN / ISO-TP Confort (95.238 kbps)")
             self.escribir_consola("  ▸ Bus objetivo: BCM Carrocería, Cuadro IPC, Clima, Pantalla")
-        elif idx == 3:
+        elif idx == 4:
             config.MODE = "simulado"
             config.VEHICLE_MODE = "VAG"
             self.escribir_consola("\n[CONEXIÓN] Modo SIMULADO Audi A6 C6 activado (banco de pruebas en PC).")
+        elif idx == 5:
+            config.MODE = "simulado"
+            config.VEHICLE_MODE = "VAG_KLINE"
+            self.escribir_consola("\n[CONEXIÓN] Modo SIMULADO VW Polo 9N3 K-Line activado (banco de pruebas en PC).")
+            self.escribir_consola("  ▸ Emulador K-Line KWP1281: Confort (46), Motor 1.9 TDI EDC15 (01), ABS (03)")
         else:
             config.MODE = "simulado"
             config.VEHICLE_MODE = "OBD2_UNIVERSAL"
@@ -3024,9 +3138,9 @@ class MainWindow(QMainWindow):
         self.worker.set_accion("adaptaciones_modulo", modulo=modulo)
         self.worker.start()
 
-    def escribir_adaptacion(self, nombre: str, canal: int, valor: float):
+    def escribir_adaptacion(self, nombre: str, canal: int, valor: float, confirmar: bool = True):
         modulo = self.combo_adapt.currentText()
-        if QMessageBox.question(
+        if not confirmar or QMessageBox.question(
             self, "Confirmar Adaptación",
             f"Escribir adaptación '{nombre}' = {valor} en {modulo}?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
@@ -3035,9 +3149,9 @@ class MainWindow(QMainWindow):
                                    nombre=nombre, canal=canal, valor=valor)
             self.worker.start()
 
-    def test_actuador(self, nombre: str, canal: str, duracion: int):
+    def test_actuador(self, nombre: str, canal: str, duracion: int, confirmar: bool = True):
         modulo = self.combo_actu.currentText()
-        if QMessageBox.question(
+        if not confirmar or QMessageBox.question(
             self, "Confirmar Activación",
             f"Activar '{nombre}' en {modulo}?\n\nEl componente se activará ~{duracion}s.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
