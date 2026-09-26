@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
 obd/vag_kline.py
 Motor de Comunicacion K-Line para el Grupo VAG (Volkswagen, Audi, SEAT, Skoda)
@@ -50,6 +50,12 @@ POLO_9N3_CONFORT_CHANNELS = {
         "defecto": 0,
         "opciones": {0: "Desactivado (Doble tiron manual)", 1: "Activado (Recomendado)"}
     },
+    5: {
+        "nombre": "Aviso Acustico al abrir con mando",
+        "desc": "Emite doble confirmacion acustica al abrir con mando a distancia.",
+        "defecto": 0,
+        "opciones": {0: "Desactivado (Silencioso)", 1: "Activado"}
+    },
     6: {
         "nombre": "Aviso Acustico / Claxon al cerrar",
         "desc": "Hace sonar la bocina del coche brevemente al cerrar con el mando a distancia.",
@@ -62,7 +68,137 @@ POLO_9N3_CONFORT_CHANNELS = {
         "defecto": 1,
         "opciones": {0: "1 Toque abre todas las puertas", 1: "Apertura Selectiva (2 Toques)"}
     },
+    8: {
+        "nombre": "Destello Intermitentes al cerrar",
+        "desc": "Parpadeo de los intermitentes para confirmar que todas las puertas estan cerradas y bloqueadas.",
+        "defecto": 1,
+        "opciones": {0: "Desactivado", 1: "Activado (Confirmacion visual)"}
+    },
+    9: {
+        "nombre": "Destello Intermitentes al abrir",
+        "desc": "Doble parpadeo de intermitentes para confirmar el desbloqueo del vehiculo con mando.",
+        "defecto": 1,
+        "opciones": {0: "Desactivado", 1: "Activado (Confirmacion visual)"}
+    },
 }
+
+CATALOGO_CONFORT_POLO = {
+    "Confort / BCM (46)": [
+        {
+            "id": "polo_autolock",
+            "nombre": "Auto-Lock (Cierre a >15 km/h)",
+            "canal": 3,
+            "byte": 0,
+            "bit": 0,
+            "desc": "Bloquea automaticamente todos los pestillos de las puertas al superar 15 km/h para evitar robos o aperturas en marcha.",
+            "defecto": 1,
+        },
+        {
+            "id": "polo_autounlock",
+            "nombre": "Auto-Unlock (Apertura al sacar llave)",
+            "canal": 4,
+            "byte": 0,
+            "bit": 1,
+            "desc": "Desbloquea automaticamente todas las puertas al extraer la llave de contacto del clausor.",
+            "defecto": 1,
+        },
+        {
+            "id": "polo_claxon_cierre",
+            "nombre": "Aviso acustico / Bocina al cerrar (Desactivar pitido)",
+            "canal": 6,
+            "byte": 0,
+            "bit": 2,
+            "desc": "Hace sonar la bocina brevemente al cerrar con el mando a distancia (0 = Silencioso / Sin molestar, 1 = Bocinazo activado).",
+            "defecto": 0,
+        },
+        {
+            "id": "polo_apertura_selectiva",
+            "nombre": "Apertura selectiva de puertas",
+            "canal": 7,
+            "byte": 0,
+            "bit": 3,
+            "desc": "1 pulsacion abre solo la puerta del conductor; 2 pulsaciones abren todo el vehiculo (0 = 1 toque abre todo).",
+            "defecto": 0,
+        },
+        {
+            "id": "polo_aviso_abrir",
+            "nombre": "Aviso acustico al abrir con mando",
+            "canal": 5,
+            "byte": 0,
+            "bit": 4,
+            "desc": "Emite dos toques de claxon al pulsar el boton de desbloqueo con el mando a distancia.",
+            "defecto": 0,
+        },
+        {
+            "id": "polo_blink_cierre",
+            "nombre": "Confirmacion de intermitentes al cerrar",
+            "canal": 8,
+            "byte": 0,
+            "bit": 5,
+            "desc": "Destello optico de intermitentes de emergencia al bloquear las cerraduras.",
+            "defecto": 1,
+        },
+        {
+            "id": "polo_blink_abrir",
+            "nombre": "Confirmacion de intermitentes al abrir",
+            "canal": 9,
+            "byte": 0,
+            "bit": 6,
+            "desc": "Doble destello optico de intermitentes de emergencia al desbloquear con el mando.",
+            "defecto": 1,
+        },
+    ],
+    "Cuadro de Instrumentos (17)": [
+        {
+            "id": "polo_aviso_cinturon",
+            "nombre": "Avisador acustico y testigo de cinturon",
+            "canal": 2,
+            "byte": 1,
+            "bit": 0,
+            "desc": "Alerta sonora tipo gong y testigo luminoso en el cuadro cuando el cinturon del conductor no esta abrochado.",
+            "defecto": 1,
+        },
+        {
+            "id": "polo_desgaste_pastillas",
+            "nombre": "Testigo de desgaste de pastillas de freno",
+            "canal": 3,
+            "byte": 1,
+            "bit": 1,
+            "desc": "Supervision activa del sensor de espesor de las pastillas de freno delanteras.",
+            "defecto": 1,
+        },
+        {
+            "id": "polo_nivel_limpia",
+            "nombre": "Aviso de nivel bajo lavaparabrisas",
+            "canal": 4,
+            "byte": 1,
+            "bit": 2,
+            "desc": "Aviso en cuadro cuando el deposito de agua del limpiaparabrisas esta por debajo del minimo.",
+            "defecto": 1,
+        },
+    ],
+    "Direccion Asistida TRW (44)": [
+        {
+            "id": "polo_direccion_deportiva",
+            "nombre": "Tacto Deportivo GTI (Asistencia firme)",
+            "canal": 1,
+            "byte": 2,
+            "bit": 0,
+            "desc": "Configura la curva electrohidraulica TRW a mapa deportivo (00140) con menor asistencia y mayor tacto de carretera.",
+            "defecto": 0,
+        },
+        {
+            "id": "polo_direccion_confort",
+            "nombre": "Tacto Confort Urbano (Asistencia suave)",
+            "canal": 2,
+            "byte": 2,
+            "bit": 1,
+            "desc": "Configura la curva electrohidraulica TRW a maxima asistencia (00112) para maniobrar y aparcar sin esfuerzo.",
+            "defecto": 1,
+        },
+    ],
+}
+
 
 TITLE_ACK                   = 0x09
 TITLE_NAK                   = 0x0A

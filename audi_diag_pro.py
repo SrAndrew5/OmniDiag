@@ -19,7 +19,8 @@ from ui.estilos import ESTILO_PRINCIPAL
 from ui.controlador import (
     MotorDiagnostico, ADAPTACIONES_VAG, ACTUADORES_VAG, TP20_MODULE_ADDR,
     ADAPTACIONES_OPEL, ACTUADORES_OPEL, OPEL_MODULES_CONFIG, CATALOGO_CONFORT_OPEL,
-    ADAPTACIONES_POLO_KLINE, ACTUADORES_POLO_KLINE, POLO_9N3_CONFORT_CHANNELS
+    ADAPTACIONES_POLO_KLINE, ACTUADORES_POLO_KLINE, POLO_9N3_CONFORT_CHANNELS,
+    CATALOGO_CONFORT_POLO
 )
 from gestion.report_generator import ReportGenerator
 from gestion.database_manager import DatabaseManager
@@ -700,14 +701,17 @@ class MainWindow(QMainWindow):
         lyt.setContentsMargins(30, 24, 30, 16)
         lyt.setSpacing(10)
 
-        lyt.addWidget(self._titulo("Wizards de Mantenimiento y Servicio (1 Clic)"))
-        lyt.addWidget(self._subtitulo(
+        self.lbl_maint_titulo = self._titulo("Wizards de Mantenimiento y Servicio (1 Clic)")
+        lyt.addWidget(self.lbl_maint_titulo)
+        self.lbl_maint_subtitulo = self._subtitulo(
             "Operaciones automatizadas y guiadas de taller para Grupo VAG / Audi A6 C6 (4F Facelift): "
             "freno de mano eléctrico, reseteo de intervalos de servicio, monitor DPF, salud de inyectores Common Rail y registro de batería."
-        ))
+        )
+        lyt.addWidget(self.lbl_maint_subtitulo)
 
-        tabs_maint = QTabWidget()
-        tabs_maint.setObjectName("tabs_mantenimiento")
+        self.tabs_mantenimiento = QTabWidget()
+        self.tabs_mantenimiento.setObjectName("tabs_mantenimiento")
+        tabs_maint = self.tabs_mantenimiento
 
         # ── TAB 1: FRENO DE MANO ELÉCTRICO (EPB) ──
         tab_epb = QWidget()
@@ -1256,11 +1260,13 @@ class MainWindow(QMainWindow):
         lyt.setContentsMargins(30, 24, 30, 16)
         lyt.setSpacing(10)
 
-        lyt.addWidget(self._titulo("Long Coding y Funciones de Confort — Audi A6 2.7 TDI (2010)"))
-        lyt.addWidget(self._subtitulo(
+        self.lbl_coding_titulo = self._titulo("Long Coding y Funciones de Confort — Audi A6 2.7 TDI (2010)")
+        lyt.addWidget(self.lbl_coding_titulo)
+        self.lbl_coding_subtitulo = self._subtitulo(
             "Activa o desactiva funciones en texto claro para tu Audi A6 (modifica los bits por detrás), "
             "o usa el editor bit a bit. Se realiza backup automático antes de escribir."
-        ))
+        )
+        lyt.addWidget(self.lbl_coding_subtitulo)
 
         # ── Fila 1: Control de Módulo y Lectura / Escritura ──
         fila_mod = QHBoxLayout()
@@ -1297,11 +1303,11 @@ class MainWindow(QMainWindow):
         fila_actions = QHBoxLayout()
         fila_actions.setSpacing(10)
 
-        btn_needle = QPushButton("🚀  Needle Sweep / Barrido de Agujas (1-Click)")
-        btn_needle.setProperty("class", "btn-accion")
-        btn_needle.setFixedHeight(38)
-        btn_needle.clicked.connect(self.activar_needle_sweep_rapido)
-        fila_actions.addWidget(btn_needle)
+        self.btn_needle = QPushButton("🚀  Needle Sweep / Barrido de Agujas (1-Click)")
+        self.btn_needle.setProperty("class", "btn-accion")
+        self.btn_needle.setFixedHeight(38)
+        self.btn_needle.clicked.connect(self.activar_needle_sweep_rapido)
+        fila_actions.addWidget(self.btn_needle)
 
         btn_guardar_backup = QPushButton("💾  Guardar Backup Manual")
         btn_guardar_backup.setProperty("class", "btn-secundario")
@@ -1322,12 +1328,12 @@ class MainWindow(QMainWindow):
         btn_diff.clicked.connect(self.abrir_dialogo_diff_backups)
         fila_actions.addWidget(btn_diff)
 
-        btn_gw = QPushButton("📋  Lista Gateway (19)")
-        btn_gw.setProperty("class", "btn-secundario")
-        btn_gw.setFixedHeight(38)
-        btn_gw.setToolTip("Editar qué centralitas y accesorios están instalados en la pasarela Gateway J533")
-        btn_gw.clicked.connect(self.abrir_dialogo_gateway_list)
-        fila_actions.addWidget(btn_gw)
+        self.btn_gw = QPushButton("📋  Lista Gateway (19)")
+        self.btn_gw.setProperty("class", "btn-secundario")
+        self.btn_gw.setFixedHeight(38)
+        self.btn_gw.setToolTip("Editar qué centralitas y accesorios están instalados en la pasarela Gateway J533")
+        self.btn_gw.clicked.connect(self.abrir_dialogo_gateway_list)
+        fila_actions.addWidget(self.btn_gw)
 
         fila_actions.addStretch()
         lyt.addLayout(fila_actions)
@@ -2204,6 +2210,13 @@ class MainWindow(QMainWindow):
                     if k.split()[0] in modulo:
                         funciones = v
                         break
+        elif self.es_modo_kline:
+            funciones = CATALOGO_CONFORT_POLO.get(modulo, [])
+            if not funciones:
+                for k, v in CATALOGO_CONFORT_POLO.items():
+                    if k.split()[0] in modulo:
+                        funciones = v
+                        break
         else:
             funciones = CATALOGO_CONFORT_A6.get(modulo, [])
         if not funciones:
@@ -2237,7 +2250,12 @@ class MainWindow(QMainWindow):
             lbl_nom.setStyleSheet("color: #FFFFFF; font-weight: bold; font-size: 13px;")
             fila_tit.addWidget(lbl_nom)
 
-            lbl_badge = QLabel(f"Byte {item['byte']} · Bit {item['bit']}")
+            if "canal" in item and self.es_modo_kline:
+                lbl_badge = QLabel(f"Canal {item['canal']:02d} · KWP1281")
+            elif "soft_code" in item and self.es_modo_kline:
+                lbl_badge = QLabel(f"Soft Coding · {item['soft_code']}")
+            else:
+                lbl_badge = QLabel(f"Byte {item.get('byte', 0)} · Bit {item.get('bit', 0)}")
             lbl_badge.setObjectName("badge_byte_bit")
             fila_tit.addWidget(lbl_badge)
             fila_tit.addStretch()
@@ -2263,7 +2281,23 @@ class MainWindow(QMainWindow):
         self._actualizar_estado_botones_confort()
 
     def _actualizar_estado_botones_confort(self):
-        """Actualiza el texto y color de los botones según los bits del coding actual."""
+        """Actualiza el texto y color de los botones según los bits del coding actual o estado K-Line."""
+        if self.es_modo_kline:
+            if not hasattr(self, "_polo_confort_estados"):
+                self._polo_confort_estados = {}
+            for item, btn in self._confort_botones:
+                item_id = item.get("id", item["nombre"])
+                activo = self._polo_confort_estados.get(item_id, item.get("defecto", 0) == 1)
+                if activo:
+                    btn.setText("✓ ACTIVADO")
+                    btn.setProperty("class", "btn-confort-activo")
+                else:
+                    btn.setText("○ DESACTIVADO")
+                    btn.setProperty("class", "btn-confort-inactivo")
+                btn.style().unpolish(btn)
+                btn.style().polish(btn)
+            return
+
         coding_actual = self.txt_coding_nuevo.text().strip() or self._coding_actual_leido
         if not coding_actual:
             for item, btn in self._confort_botones:
@@ -2290,6 +2324,38 @@ class MainWindow(QMainWindow):
 
     def _toggle_funcion_confort(self, item: dict, btn: QPushButton):
         """Modifica el bit correspondiente por detrás en memoria y actualiza la GUI."""
+        if self.es_modo_kline:
+            if not hasattr(self, "_polo_confort_estados"):
+                self._polo_confort_estados = {}
+            item_id = item.get("id", item["nombre"])
+            estado_actual = self._polo_confort_estados.get(item_id, item.get("defecto", 0) == 1)
+            nuevo_estado = not estado_actual
+            self._polo_confort_estados[item_id] = nuevo_estado
+
+            if nuevo_estado:
+                btn.setText("✓ ACTIVADO")
+                btn.setProperty("class", "btn-confort-activo")
+            else:
+                btn.setText("○ DESACTIVADO")
+                btn.setProperty("class", "btn-confort-inactivo")
+            btn.style().unpolish(btn)
+            btn.style().polish(btn)
+
+            canal = item.get("canal", 3)
+            val_escrito = 1 if nuevo_estado else 0
+            if hasattr(self, "txt_coding_nuevo"):
+                self.txt_coding_nuevo.setText(f"Canal {canal:02d} = {val_escrito} (Polo 9N3)")
+            self.escribir_consola(f"\n[CONFORT POLO] '{item['nombre']}' -> {'ACTIVADO' if nuevo_estado else 'DESACTIVADO'} (Canal {canal:02d} = {val_escrito})")
+            if self.worker.conectado:
+                self.worker.ejecutar(
+                    "adaptacion_escribir",
+                    modulo="Confort / BCM (46)",
+                    nombre=item["nombre"],
+                    canal=canal,
+                    valor=val_escrito
+                )
+            return
+
         if not self._coding_actual_leido:
             if self.es_modo_opel:
                 self._coding_actual_leido = self.txt_coding_nuevo.text().strip() or "06 05 02 00"
@@ -2743,6 +2809,36 @@ class MainWindow(QMainWindow):
             if hasattr(self, "txt_coding_nuevo"):
                 self.txt_coding_nuevo.setText(self._coding_actual_leido)
 
+            # Aislamiento Mantenimiento Polo 9N3
+            if hasattr(self, "tabs_mantenimiento"):
+                for i in range(self.tabs_mantenimiento.count()):
+                    self.tabs_mantenimiento.setTabVisible(i, i in (1, 5, 7))
+                self.tabs_mantenimiento.setCurrentIndex(1)
+            if hasattr(self, "lbl_maint_titulo"):
+                self.lbl_maint_titulo.setText("Wizards de Mantenimiento y Servicio — VW Polo 9N3")
+            if hasattr(self, "lbl_maint_subtitulo"):
+                self.lbl_maint_subtitulo.setText(
+                    "Operaciones guiadas de taller para VW Polo 9N3 (Plataforma PQ24): Reset de servicio SRI (17), "
+                    "purga hidráulica asistida ABS (03) y calibración sensor de dirección G85 (03/44). "
+                    "Se han filtrado automáticamente los sistemas no equipados (Caja automática, DPF, EPB, BEM, MMI)."
+                )
+
+            # Aislamiento Long Coding Polo 9N3
+            if hasattr(self, "lbl_coding_titulo"):
+                self.lbl_coding_titulo.setText("Codificación y Confort — VW Polo 9N3 (PQ24 K-Line)")
+            if hasattr(self, "lbl_coding_subtitulo"):
+                self.lbl_coding_subtitulo.setText(
+                    "Activa o desactiva funciones de confort adaptadas para VW Polo 9N3 (KWP1281). "
+                    "En la plataforma PQ24 la configuración se realiza mediante canales de adaptación y codificación corta (Soft Coding)."
+                )
+            if hasattr(self, "btn_needle"):
+                self.btn_needle.setVisible(False)
+            if hasattr(self, "btn_gw"):
+                self.btn_gw.setVisible(False)
+            if hasattr(self, "tabs_coding"):
+                self.tabs_coding.setTabText(0, "🚗  Funciones de Confort — VW Polo 9N3 (KWP1281)")
+                self.tabs_coding.setTabVisible(1, False)
+
             modulos_polo_dtc = [
                 "Confort / BCM (46)",
                 "Motor (01)",
@@ -2751,6 +2847,7 @@ class MainWindow(QMainWindow):
                 "Airbag (15)",
                 "Climatización (08)",
                 "Radio / Sonido (56)",
+                "Dirección Asistida TRW (44)",
             ]
             modulos_polo_actu = list(ACTUADORES_POLO_KLINE.keys())
             modulos_polo_adapt = list(ADAPTACIONES_POLO_KLINE.keys())
@@ -2765,9 +2862,10 @@ class MainWindow(QMainWindow):
             if hasattr(self, "combo_coding"):
                 self.combo_coding.blockSignals(True)
                 self.combo_coding.clear()
-                self.combo_coding.addItems(["Confort / BCM (46)", "Motor (01)", "Cuadro de Instrumentos (17)", "Airbag (15)"])
+                self.combo_coding.addItems(["Confort / BCM (46)", "Cuadro de Instrumentos (17)", "Dirección Asistida TRW (44)"])
                 self.combo_coding.setCurrentText("Confort / BCM (46)")
                 self.combo_coding.blockSignals(False)
+                self._cargar_catalogo_confort(self.combo_coding.currentText())
 
             if hasattr(self, "combo_adapt"):
                 self.combo_adapt.blockSignals(True)
@@ -2785,6 +2883,8 @@ class MainWindow(QMainWindow):
                 self.combo_actu.blockSignals(False)
                 self._rebuild_actuadores(self.combo_actu.currentText())
 
+            self._actualizar_estado_botones_confort()
+
         elif idx in (2, 3, 6):  # Modos Opel
             if hasattr(self, "lbl_vin"):
                 self.lbl_vin.setText("W0L0SDL6874086807")
@@ -2800,6 +2900,34 @@ class MainWindow(QMainWindow):
                 self.txt_coding_actual.setText(self._coding_actual_leido)
             if hasattr(self, "txt_coding_nuevo"):
                 self.txt_coding_nuevo.setText(self._coding_actual_leido)
+
+            # Aislamiento Mantenimiento Opel Corsa
+            if hasattr(self, "tabs_mantenimiento"):
+                for i in range(self.tabs_mantenimiento.count()):
+                    self.tabs_mantenimiento.setTabVisible(i, i == 1)
+                self.tabs_mantenimiento.setCurrentIndex(1)
+            if hasattr(self, "lbl_maint_titulo"):
+                self.lbl_maint_titulo.setText("Wizards de Mantenimiento y Servicio — Opel Corsa D")
+            if hasattr(self, "lbl_maint_subtitulo"):
+                self.lbl_maint_subtitulo.setText(
+                    "Operaciones guiadas de taller para Opel Corsa D: Reset de intervalos de servicio e inspección. "
+                    "Se han filtrado los asistentes específicos de VAG."
+                )
+
+            # Aislamiento Long Coding Opel Corsa
+            if hasattr(self, "lbl_coding_titulo"):
+                self.lbl_coding_titulo.setText("Codificación y Variantes — Opel Corsa D (GMLAN / CAN)")
+            if hasattr(self, "lbl_coding_subtitulo"):
+                self.lbl_coding_subtitulo.setText(
+                    "Configura opciones de confort y variantes para BCM e IPC en Opel Corsa D."
+                )
+            if hasattr(self, "btn_needle"):
+                self.btn_needle.setVisible(True)
+            if hasattr(self, "btn_gw"):
+                self.btn_gw.setVisible(False)
+            if hasattr(self, "tabs_coding"):
+                self.tabs_coding.setTabText(0, "🚗  Funciones de Confort — Opel Corsa D")
+                self.tabs_coding.setTabVisible(1, True)
 
             modulos_opel_dtc = list(OPEL_MODULES_CONFIG.keys()) + ["Todos los Sistemas OBD-II"]
             modulos_opel_actu = list(ACTUADORES_OPEL.keys())
@@ -2858,6 +2986,35 @@ class MainWindow(QMainWindow):
             if hasattr(self, "txt_coding_nuevo"):
                 self.txt_coding_nuevo.setText("")
 
+            # Restaurar todos los Wizards de Mantenimiento de Audi A6
+            if hasattr(self, "tabs_mantenimiento"):
+                for i in range(self.tabs_mantenimiento.count()):
+                    self.tabs_mantenimiento.setTabVisible(i, True)
+                self.tabs_mantenimiento.setCurrentIndex(0)
+            if hasattr(self, "lbl_maint_titulo"):
+                self.lbl_maint_titulo.setText("Wizards de Mantenimiento y Servicio (1 Clic)")
+            if hasattr(self, "lbl_maint_subtitulo"):
+                self.lbl_maint_subtitulo.setText(
+                    "Operaciones automatizadas y guiadas de taller para Grupo VAG / Audi A6 C6 (4F Facelift): "
+                    "freno de mano eléctrico, reseteo de intervalos de servicio, monitor DPF, salud de inyectores Common Rail y registro de batería."
+                )
+
+            # Restaurar Long Coding Audi A6
+            if hasattr(self, "lbl_coding_titulo"):
+                self.lbl_coding_titulo.setText("Long Coding y Funciones de Confort — Audi A6 2.7 TDI (2010)")
+            if hasattr(self, "lbl_coding_subtitulo"):
+                self.lbl_coding_subtitulo.setText(
+                    "Activa o desactiva funciones en texto claro para tu Audi A6 (modifica los bits por detrás), "
+                    "o usa el editor bit a bit. Se realiza backup automático antes de escribir."
+                )
+            if hasattr(self, "btn_needle"):
+                self.btn_needle.setVisible(True)
+            if hasattr(self, "btn_gw"):
+                self.btn_gw.setVisible(True)
+            if hasattr(self, "tabs_coding"):
+                self.tabs_coding.setTabText(0, "🚗  Funciones de Confort — Audi A6 (Texto Claro)")
+                self.tabs_coding.setTabVisible(1, True)
+
             modulos_vag = list(TP20_MODULE_ADDR.keys())
             modulos_vag_actu = list(ACTUADORES_VAG.keys())
             modulos_vag_adapt = list(ADAPTACIONES_VAG.keys())
@@ -2866,6 +3023,7 @@ class MainWindow(QMainWindow):
                 self.combo_dtc.blockSignals(True)
                 self.combo_dtc.clear()
                 self.combo_dtc.addItems(modulos_vag)
+                self.combo_dtc.setCurrentText("Cuadro Instrumentos (17)")
                 self.combo_dtc.blockSignals(False)
 
             if hasattr(self, "combo_coding"):
@@ -2882,6 +3040,9 @@ class MainWindow(QMainWindow):
                 self.combo_adapt.blockSignals(True)
                 self.combo_adapt.clear()
                 self.combo_adapt.addItems(modulos_vag_adapt)
+                idx_a = self.combo_adapt.findText("Cuadro Instrumentos (17)")
+                if idx_a >= 0:
+                    self.combo_adapt.setCurrentIndex(idx_a)
                 self.combo_adapt.blockSignals(False)
                 self._rebuild_adaptaciones(self.combo_adapt.currentText())
 
@@ -2889,8 +3050,13 @@ class MainWindow(QMainWindow):
                 self.combo_actu.blockSignals(True)
                 self.combo_actu.clear()
                 self.combo_actu.addItems(modulos_vag_actu)
+                idx_ac = self.combo_actu.findText("Cuadro Instrumentos (17)")
+                if idx_ac >= 0:
+                    self.combo_actu.setCurrentIndex(idx_ac)
                 self.combo_actu.blockSignals(False)
                 self._rebuild_actuadores(self.combo_actu.currentText())
+
+            self._actualizar_estado_botones_confort()
 
     def iniciar_conexion(self):
         idx = self.combo_modo.currentIndex() if hasattr(self, "combo_modo") else 0
@@ -3067,6 +3233,17 @@ class MainWindow(QMainWindow):
             self.escribir_consola(f"[ERROR] No se pudo guardar el backup: {e}")
 
     def escribir_coding(self):
+        if self.es_modo_kline:
+            nuevo = self.txt_coding_nuevo.text().strip()
+            if not nuevo:
+                self.escribir_consola("[ERROR] Campo de nuevo coding vacío.")
+                return
+            modulo = self.combo_coding.currentText()
+            self.escribir_consola(f"\n[K-LINE CODING] Grabando Soft Coding '{nuevo}' en {modulo}...")
+            self.worker.set_accion("escribir_coding", modulo=modulo, coding=nuevo, coding_antiguo=self._coding_actual_leido or "00067")
+            self.worker.start()
+            return
+
         if not self._coding_actual_leido:
             if self.es_modo_opel:
                 self._coding_actual_leido = self.txt_coding_nuevo.text().strip() or "06 05 02 00"

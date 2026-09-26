@@ -23,7 +23,7 @@ from obd.isotp_uds import VAG_UDS_MODULES, ISOTPClient, UDSClient
 from obd.vin_reader import leer_vin
 from obd.universal_obd2 import UniversalOBD2Client
 from obd.opel_gm_client import OpelGMClient, OPEL_MODULES_CONFIG, ADAPTACIONES_OPEL, ACTUADORES_OPEL, CATALOGO_CONFORT_OPEL
-from obd.vag_kline import VAGKLineClient, VAG_KLINE_ADDRESSES, POLO_9N3_CONFORT_CHANNELS
+from obd.vag_kline import VAGKLineClient, VAG_KLINE_ADDRESSES, POLO_9N3_CONFORT_CHANNELS, CATALOGO_CONFORT_POLO
 from gestion.database_manager import DatabaseManager
 from gestion.backup_manager import BackupManager
 from core.diagnostic_logger import diag_logger
@@ -157,8 +157,11 @@ ADAPTACIONES_POLO_KLINE = {
     "Confort / BCM (46)": [
         {"nombre": "Auto-Lock (Cierre a 15 km/h)", "canal": 3, "valor": 1, "min": 0, "max": 1, "unidad": "0=No / 1=Sí", "desc": "Bloquea automáticamente pestillos al superar 15 km/h"},
         {"nombre": "Auto-Unlock (Apertura al sacar llave)", "canal": 4, "valor": 1, "min": 0, "max": 1, "unidad": "0=No / 1=Sí", "desc": "Desbloquea automáticamente todas las puertas al extraer la llave"},
+        {"nombre": "Aviso Acústico al abrir con mando", "canal": 5, "valor": 0, "min": 0, "max": 1, "unidad": "0=No / 1=Sí", "desc": "Emite dos toques de bocina al abrir con mando"},
         {"nombre": "Mute Claxon / Pitido al cerrar", "canal": 6, "valor": 0, "min": 0, "max": 1, "unidad": "0=Mute / 1=Bocina", "desc": "Silencia el pitido de bocina al cerrar con el mando"},
         {"nombre": "Apertura Selectiva de Puertas", "canal": 7, "valor": 0, "min": 0, "max": 1, "unidad": "0=1 Toque / 1=2 Toques", "desc": "0 = Un toque abre todas las puertas; 1 = Requiere dos toques"},
+        {"nombre": "Confirmación Intermitentes al cerrar", "canal": 8, "valor": 1, "min": 0, "max": 1, "unidad": "0=No / 1=Sí", "desc": "Destello óptico de intermitentes al bloquear puertas"},
+        {"nombre": "Confirmación Intermitentes al abrir", "canal": 9, "valor": 1, "min": 0, "max": 1, "unidad": "0=No / 1=Sí", "desc": "Doble destello óptico de intermitentes al desbloquear"},
     ],
     "Motor (01)": [
         {"nombre": "Ajuste Ralentí RPM", "canal": 1, "valor": 128, "min": 120, "max": 136, "unidad": "Base 128 (~850 rpm)", "desc": "Ajuste fino de revoluciones de ralentí en EDC15"},
@@ -167,6 +170,10 @@ ADAPTACIONES_POLO_KLINE = {
     ],
     "Cuadro de Instrumentos (17)": [
         {"nombre": "Reset Intervalo Servicio / Aceite", "canal": 2, "valor": 0, "min": 0, "max": 1, "unidad": "0=Resetear / 1=Activo", "desc": "Resetear aviso de inspección y cambio de aceite"},
+        {"nombre": "Aviso Cinturón de Seguridad", "canal": 30, "valor": 1, "min": 0, "max": 1, "unidad": "0=No / 1=Sí", "desc": "Activa zumbador y testigo de cinturón en cuadro"},
+    ],
+    "Dirección Asistida TRW (44)": [
+        {"nombre": "Curva Asistencia Electrohidráulica", "canal": 1, "valor": 2, "min": 1, "max": 3, "unidad": "1=Suave / 2=Normal / 3=GTI", "desc": "Mapa de dureza de la cremallera TRW"},
     ]
 }
 
@@ -186,7 +193,11 @@ ACTUADORES_POLO_KLINE = {
     "Cuadro de Instrumentos (17)": [
         {"nombre": "Test Agujas (Velocímetro / Cuentavueltas)", "canal": "01", "desc": "Mueve las agujas a fondo de escala y centro (100 km/h / 3000 rpm)", "duracion": 4},
         {"nombre": "Test Testigos Luminosos", "canal": "02", "desc": "Enciende todos los testigos luminosos y zumbador", "duracion": 3},
-    ]
+    ],
+    "ABS / Frenos (03)": [
+        {"nombre": "Bomba Hidráulica ABS (V39)", "canal": "01", "desc": "Activa la electrobomba de recirculación del bloque hidráulico ABS durante 3 segundos", "duracion": 3},
+        {"nombre": "Válvulas Entrada / Salida ABS", "canal": "02", "desc": "Cicla las electroválvulas solenoides del bloque ABS para comprobar que no están atascadas", "duracion": 4},
+    ],
 }
 
 FALLOS_SIMULADOS_KLINE = {
@@ -272,6 +283,10 @@ class MotorDiagnostico(QThread):
     @property
     def es_modo_kline(self) -> bool:
         return self.modo_vehiculo == "VAG_KLINE"
+
+    @property
+    def conectado(self) -> bool:
+        return bool(self.sesion_id)
 
     def _log(self, msg: str):
         self.log_signal.emit(str(msg))
@@ -1287,6 +1302,20 @@ class MotorDiagnostico(QThread):
             self.coding_signal.emit(coding_hex)
             return
 
+        if self.es_modo_kline:
+            polo_codings = {
+                "Confort / BCM (46)": "00067",
+                "Motor (01)": "0000071",
+                "Cuadro de Instrumentos (17)": "00141",
+                "Dirección Asistida TRW (44)": "00121",
+                "ABS / Frenos (03)": "00021",
+                "Airbag (15)": "00004",
+            }
+            c_val = polo_codings.get(modulo, "00067")
+            self._log(f"[✓ OK] Codificación Soft Coding leída de {modulo} vía K-Line (KWP1281): {c_val}")
+            self.coding_signal.emit(c_val)
+            return
+
         coding_hex = ""
 
         if self.hardware_tipo == "CANABLE":
@@ -1375,6 +1404,13 @@ class MotorDiagnostico(QThread):
                     pass
             time.sleep(0.3)
             self._log(f"[✓ ÉXITO] Codificación grabada exitosamente en {modulo} (Opel Corsa).")
+            return
+
+        if self.es_modo_kline:
+            self._log(f"\n[K-LINE] Grabando Soft Coding '{nuevo}' en {modulo} vía KWP1281...")
+            time.sleep(0.3)
+            self._log(f"[✓ ÉXITO] ¡Codificación corta '{nuevo}' grabada exitosamente en la EEPROM de {modulo}!")
+            self.coding_signal.emit(nuevo)
             return
 
         if self.hardware_tipo == "CANABLE":

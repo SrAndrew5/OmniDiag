@@ -169,6 +169,102 @@ class TestPoloMainIntegration(unittest.TestCase):
         self.assertIn("Confort / BCM (46)", modulos_en_tabla)
         self.assertIn("Motor (01)", modulos_en_tabla)
 
+    def test_09_aislamiento_pestanas_mantenimiento(self):
+        """Verifica que los Wizards de Mantenimiento se aíslen estrictamente según el vehículo."""
+        # 1. Modo VW Polo 9N3 K-Line
+        self.win.combo_modo.setCurrentIndex(5)
+        tabs = self.win.tabs_mantenimiento
+        self.assertEqual(tabs.count(), 10)
+
+        # Solo visibles: 1 (SRI), 5 (Purga ABS), 7 (G85 Dirección)
+        self.assertTrue(tabs.isTabVisible(1), "Tab 1 SRI debe ser visible en Polo")
+        self.assertTrue(tabs.isTabVisible(5), "Tab 5 Purga ABS debe ser visible en Polo")
+        self.assertTrue(tabs.isTabVisible(7), "Tab 7 G85 debe ser visible en Polo")
+
+        # Ocultos en Polo (No aplican físicamente)
+        self.assertFalse(tabs.isTabVisible(0), "Tab 0 EPB debe estar oculto en Polo")
+        self.assertFalse(tabs.isTabVisible(2), "Tab 2 DPF debe estar oculto en Polo (sin filtro de partículas)")
+        self.assertFalse(tabs.isTabVisible(3), "Tab 3 Inyectores V6 debe estar oculto en Polo")
+        self.assertFalse(tabs.isTabVisible(4), "Tab 4 BEM Batería debe estar oculto en Polo")
+        self.assertFalse(tabs.isTabVisible(6), "Tab 6 Caja Automática ATF debe estar oculto en Polo")
+        self.assertFalse(tabs.isTabVisible(8), "Tab 8 Chapaletas V157 debe estar oculto en Polo")
+        self.assertFalse(tabs.isTabVisible(9), "Tab 9 Menú Verde MMI debe estar oculto en Polo")
+
+        self.assertIn("VW Polo 9N3", self.win.lbl_maint_titulo.text())
+
+        # 2. Modo Audi A6 C6 (Restauración completa de los 10 wizards)
+        self.win.combo_modo.setCurrentIndex(4)
+        for i in range(10):
+            self.assertTrue(tabs.isTabVisible(i), f"Tab {i} debe estar visible en Audi A6")
+        self.assertIn("Wizards de Mantenimiento y Servicio (1 Clic)", self.win.lbl_maint_titulo.text())
+
+        # 3. Modo Opel Corsa D (Solo SRI visible)
+        self.win.combo_modo.setCurrentIndex(6)
+        self.assertTrue(tabs.isTabVisible(1), "Tab 1 SRI debe ser visible en Opel Corsa")
+        self.assertFalse(tabs.isTabVisible(0), "Tab 0 EPB debe estar oculto en Opel Corsa")
+        self.assertFalse(tabs.isTabVisible(2), "Tab 2 DPF debe estar oculto en Opel Corsa")
+        self.assertFalse(tabs.isTabVisible(6), "Tab 6 Caja ATF debe estar oculto en Opel Corsa")
+
+    def test_10_aislamiento_long_coding_y_confort(self):
+        """Verifica que la pantalla de Codificación no mezcle funciones de Audi con el Polo."""
+        self.win.combo_modo.setCurrentIndex(5)
+
+        # Subtítulo y Pestañas adaptadas
+        self.assertIn("VW Polo 9N3", self.win.lbl_coding_titulo.text())
+        self.assertIn("VW Polo 9N3", self.win.tabs_coding.tabText(0))
+        self.assertFalse(self.win.tabs_coding.isTabVisible(1), "Tab 1 Editor Bit a Bit UDS debe estar oculto en Polo K-Line")
+
+        # Botones exclusivos de Audi ocultos
+        self.assertFalse(self.win.btn_needle.isVisible(), "Needle Sweep 1-Click debe ocultarse en Polo")
+        self.assertFalse(self.win.btn_gw.isVisible(), "Lista Gateway 19 debe ocultarse en Polo")
+
+        # Módulos de codificación en Polo
+        modulos_coding = [self.win.combo_coding.itemText(i) for i in range(self.win.combo_coding.count())]
+        self.assertIn("Confort / BCM (46)", modulos_coding)
+        self.assertIn("Cuadro de Instrumentos (17)", modulos_coding)
+        self.assertNotIn("Gateway CAN (19)", modulos_coding)
+        self.assertNotIn("Caja de Cambios (02)", modulos_coding)
+        self.assertNotIn("Freno de Mano EPB (53)", modulos_coding)
+
+        # Catálogo de Confort del Polo: verificar que no haya opciones de Audi A6 (ej: plegado espejos)
+        nombres_confort = [item["nombre"] for item, btn in self.win._confort_botones]
+        self.assertTrue(any("Auto-Lock" in n for n in nombres_confort))
+        self.assertTrue(any("Auto-Unlock" in n for n in nombres_confort))
+        self.assertTrue(any("Bocina" in n or "Claxon" in n for n in nombres_confort))
+        self.assertFalse(any("espejo" in n.lower() or "retrovisor" in n.lower() for n in nombres_confort),
+                         "No deben aparecer opciones de espejos plegables del Audi en el Polo")
+
+    def test_11_aislamiento_actuadores(self):
+        """Verifica que el selector de Actuadores muestre únicamente componentes del Polo."""
+        self.win.combo_modo.setCurrentIndex(5)
+        modulos_actu = [self.win.combo_actu.itemText(i) for i in range(self.win.combo_actu.count())]
+        self.assertIn("Confort / BCM (46)", modulos_actu)
+        self.assertIn("Motor (01)", modulos_actu)
+        self.assertIn("Cuadro de Instrumentos (17)", modulos_actu)
+        self.assertIn("ABS / Frenos (03)", modulos_actu)
+        self.assertNotIn("Caja de Cambios (02)", modulos_actu)
+        self.assertNotIn("Freno de Mano EPB (53)", modulos_actu)
+
+        # Seleccionar ABS / Frenos y verificar actuadores del bloque hidráulico
+        self.win.combo_actu.setCurrentText("ABS / Frenos (03)")
+        self.app.processEvents()
+
+    def test_12_toggle_confort_polo_y_soft_coding(self):
+        """Verifica el accionamiento de los botones de confort de Polo y grabación de Soft Coding."""
+        self.win.combo_modo.setCurrentIndex(5)
+        self.assertGreater(len(self.win._confort_botones), 0)
+
+        item, btn = self.win._confort_botones[0]
+        texto_ini = btn.text()
+        self.win._toggle_funcion_confort(item, btn)
+        self.assertNotEqual(btn.text(), texto_ini)
+
+        # Escribir coding con 5 dígitos decimales
+        self.win.txt_coding_nuevo.setText("00071")
+        self.win.escribir_coding()
+        self._wait_worker()
+        self.assertIn("00071", self.win.txt_coding_actual.text())
+
 
 if __name__ == "__main__":
     print("=" * 65)
