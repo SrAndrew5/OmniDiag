@@ -3,7 +3,7 @@
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![PyQt6](https://img.shields.io/badge/GUI-PyQt6-green.svg?logo=qt&logoColor=white)](https://riverbankcomputing.com/software/pyqt/)
 [![SQLite3](https://img.shields.io/badge/Database-SQLite3-lightgrey.svg?logo=sqlite&logoColor=white)](https://www.sqlite.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: Proprietary](https://img.shields.io/badge/License-All%20Rights%20Reserved-red.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-brightgreen.svg)](#supported-hardware--transports)
 [![Protocols](https://img.shields.io/badge/Protocols-CAN%20TP2.0%20%7C%20KWP1281%20%7C%20UDS%20%7C%20GMLAN-red.svg)](#protocol-architecture)
 
@@ -328,10 +328,16 @@ OmniDiag/
 
 ---
 
-## 📄 License
+## 📄 License & Intellectual Property
 
-This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
+Copyright © 2026 **SrAndrew**. All Rights Reserved.
+
+This project is released under a **Proprietary & Portfolio View-Only License**:
+* **Permitted:** Public source code inspection, technical evaluation, code review, and academic/portfolio assessment for recruitment purposes.
+* **Prohibited:** Any unauthorized compiling, running, modification, copying, distribution, or commercial exploitation without prior written consent from the author.
+
+See the [LICENSE](LICENSE) file for complete legal terms.
 
 ---
 
-*Developed with passion for automotive engineering, low-level reverse engineering, and open-source software.*
+*Developed with passion for automotive engineering, low-level reverse engineering, and embedded software.*
