@@ -252,11 +252,11 @@ OmniDiag dispone de suites de pruebas unitarias y de integración automáticas:
 
 ```bash
 # Ejecutar suite de integración Polo 9N3 y K-Line (18 tests)
-python -m unittest test_polo_main_integration.py test_kline_suite.py
+python -m unittest tests/test_polo_main_integration.py tests/test_kline_suite.py
 
 # Ejecutar validaciones de asistentes de servicio y suites V11 / V12
-python test_v11_suite.py
-python test_v12_suite.py
+python tests/test_v11_suite.py
+python tests/test_v12_suite.py
 ```
 
 ---
@@ -265,12 +265,14 @@ python test_v12_suite.py
 
 ```text
 OmniDiag/
+├── main.py                      # Lanzador limpio de la aplicación
 ├── audi_diag_pro.py             # Punto de entrada principal e interfaz gráfica PyQt6
 ├── auditoria_kilometraje.py     # Auditor forense de kilometraje real multi-ECU
 ├── requirements.txt             # Dependencias del proyecto en Python
 ├── README.md                    # Documentación del proyecto (Inglés)
 ├── README_ES.md                 # Documentación del proyecto (Español)
 │
+├── tests/                       # Suites automáticas de pruebas unitarias y de integración
 ├── obd/                         # Protocolos de bajo nivel y drivers de comunicación
 │   ├── vag_kline.py             # Motor nativo VAG KWP1281 para Línea K (Pin 7)
 │   ├── vw_tp20.py               # Capa de transporte VW Transport Protocol 2.0 (TP2.0)
