@@ -124,33 +124,33 @@ Desarrollada en **Python** y **PyQt6**, OmniDiag implementa directamente los pro
 ```mermaid
 flowchart TD
     subgraph UI ["Capa de Interfaz de Usuario (PyQt6)"]
-        MW[MainWindow / audi_diag_pro.py]
-        WIZ[10 Asistentes de Mantenimiento]
-        OSC[Osciloscopio Vectorial]
-        CONF[Confort y Codificación Larga]
-        DTC[Ficha Técnica DTC Inteligente]
+        MW["MainWindow (audi_diag_pro.py)"]
+        WIZ["10 Asistentes de Mantenimiento"]
+        OSC["Osciloscopio Vectorial"]
+        CONF["Confort y Codificación Larga"]
+        DTC["Ficha Técnica DTC Inteligente"]
     end
 
     subgraph Core ["Controlador y Núcleo de Aplicación"]
-        CTRL[Hilo Worker QThread / controlador.py]
-        DB[(Base de Datos SQLite3 / database_manager.py)]
-        DIFF[Motor de Diffs y Backups]
-        AUDIT[Auditor Forense de Kilometraje]
+        CTRL["Hilo Worker QThread (controlador.py)"]
+        DB[("Base de Datos SQLite3")]
+        DIFF["Motor de Diffs y Backups"]
+        AUDIT["Auditor Forense de Kilometraje"]
     end
 
     subgraph Protocolos ["Motor de Protocolos de Automoción"]
-        TP20[Capa VW TP 2.0 / vw_tp20.py]
-        KWP1281[Capa VAG KWP1281 / vag_kline.py]
-        KWP2000[KWP2000 / ISO 14230]
-        UDS[UDS / ISO 14229]
-        GMLAN[GM GMLAN / ISO 15765]
-        MOCK[Motor de Simulación MOCK ECU]
+        TP20["Capa VW TP 2.0 (vw_tp20.py)"]
+        KWP1281["Capa VAG KWP1281 (vag_kline.py)"]
+        KWP2000["KWP2000 (ISO 14230)"]
+        UDS["UDS (ISO 14229)"]
+        GMLAN["GM GMLAN (ISO 15765)"]
+        MOCK["Motor de Simulación MOCK ECU"]
     end
 
     subgraph Hardware ["Hardware y Adaptadores Físicos"]
-        USB_CAN[CANtact / SocketCAN / PCAN / Vector]
-        USB_KLINE[Cable USB K-Line FTDI FT232R (Pin 7)]
-        ELM[ELM327 / STN2120 / OBDLink]
+        USB_CAN["CANtact / SocketCAN / PCAN / Vector"]
+        USB_KLINE["Cable USB K-Line FTDI FT232R - Pin 7"]
+        ELM["ELM327 / STN2120 / OBDLink"]
     end
 
     UI --> CTRL

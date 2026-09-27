@@ -123,33 +123,33 @@ Built with **Python** and **PyQt6**, OmniDiag implements native low-level commun
 ```mermaid
 flowchart TD
     subgraph UI ["User Interface (PyQt6)"]
-        MW[MainWindow / audi_diag_pro.py]
-        WIZ[10 Service Wizards]
-        OSC[Vector Oscilloscope]
-        CONF[Comfort & Long Coding]
-        DTC[Smart DTC Guider]
+        MW["MainWindow (audi_diag_pro.py)"]
+        WIZ["10 Service Wizards"]
+        OSC["Vector Oscilloscope"]
+        CONF["Comfort & Long Coding"]
+        DTC["Smart DTC Guider"]
     end
 
     subgraph Core ["Application Controller & Worker"]
-        CTRL[Worker Thread / controlador.py]
-        DB[(SQLite3 Database / database_manager.py)]
-        DIFF[Backup & Diff Engine]
-        AUDIT[Forensic Mileage Auditor]
+        CTRL["Worker Thread (controlador.py)"]
+        DB[("SQLite3 Database")]
+        DIFF["Backup & Diff Engine"]
+        AUDIT["Forensic Mileage Auditor"]
     end
 
     subgraph Protocols ["Low-Level Protocol Engine"]
-        TP20[VW TP 2.0 Layer / vw_tp20.py]
-        KWP1281[VAG KWP1281 Layer / vag_kline.py]
-        KWP2000[KWP2000 / ISO 14230]
-        UDS[UDS / ISO 14229]
-        GMLAN[GM GMLAN / ISO 15765]
-        MOCK[Mock ECU Simulator Engine]
+        TP20["VW TP 2.0 Layer (vw_tp20.py)"]
+        KWP1281["VAG KWP1281 Layer (vag_kline.py)"]
+        KWP2000["KWP2000 (ISO 14230)"]
+        UDS["UDS (ISO 14229)"]
+        GMLAN["GM GMLAN (ISO 15765)"]
+        MOCK["Mock ECU Simulator Engine"]
     end
 
     subgraph Hardware ["Physical Transports & Adapters"]
-        USB_CAN[CANtact / SocketCAN / PCAN / Vector]
-        USB_KLINE[FTDI FT232R KKL Cable (Pin 7)]
-        ELM[ELM327 / STN2120 / OBDLink]
+        USB_CAN["CANtact / SocketCAN / PCAN / Vector"]
+        USB_KLINE["FTDI FT232R KKL Cable - Pin 7"]
+        ELM["ELM327 / STN2120 / OBDLink"]
     end
 
     UI --> CTRL
