@@ -307,16 +307,25 @@ OmniDiag/
 
 ## 🗺 Hoja de Ruta (Roadmap)
 
-- [x] Implementación completa de VAG TP 2.0 sobre bus CAN.
-- [x] Implementación nativa de KWP1281 sobre Línea K (Pin 7) con init a 5 baudios.
-- [x] 10 Asistentes de Mantenimiento guiados (EPB, DPF, SRI, BEM, Inyectores, ABS, ZF, G85, V157, MMI).
-- [x] Osciloscopio vectorial en tiempo real con cronómetro dinámico de aceleración.
-- [x] Ficha técnica guiada de averías con localización física de componentes.
-- [x] Auditoría forense de kilometraje real contrastada en 6 centralitas.
-- [x] Soporte modular adaptado para VW Polo 9N3 y Opel Corsa D.
-- [ ] Implementación de protocolos específicos para Fiat / Alfa Romeo por Línea K y CAN (KWP2000 / FIAT 9141).
-- [ ] Cargador de bases de datos de diagnosis en formato ODX/PDX para UDS moderno.
-- [ ] Soporte para adaptadores inalámbricos Bluetooth Low Energy (BLE) para versiones móviles.
+### ✅ Soporte Completo Actual
+- [x] **Audi A6 C6 (2004–2011)**: Soporte completo por Bus CAN (TP 2.0 / KWP2000 / UDS) en todas las centralitas, 10 asistentes de mantenimiento, fichas técnicas DTC y auditoría de kilometraje real.
+- [x] **Opel Corsa D 2007 (Bus)**: Soporte completo por Bus CAN (High-Speed CAN y GMLAN de baja velocidad) para Motor, BCM, Cuadro (IPC) y Dirección (EPS).
+- [x] **Volkswagen Polo 9N3 2007 (K-Line)**: Soporte completo por Línea K (KWP1281 nativo / Pin 7 a 10.400 baudios) en sus 8 módulos, canales reales de adaptación, test de actuadores y telemetría TDI.
+- [x] **Núcleo de Diagnosis Avanzado**: Osciloscopio vectorial de telemetría, cronómetro de aceleración CAN, gestor diferencial de copias de seguridad con rollback e informes en HTML.
+
+### 🎯 Próximo Hito Inmediato
+- [ ] **Grupo Fiat (Línea K)**: Soporte completo por Línea K para Fiat, Alfa Romeo y Lancia (protocolos KWP2000 / ISO 9141-2 / Fiatecuscan mediante Pines 1, 7 y 9) para Motor, ABS, Airbag y Dirección Asistida.
+
+### 🚀 Próximas Fases de Expansión
+- [ ] **Grupo Fiat (Bus CAN)**: Soporte completo por Bus CAN para Fiat/Alfa/Lancia (CAN Alta Velocidad 500k y red de carrocería B-CAN a 50k, alineamiento proxy).
+- [ ] **Grupo Stellantis**: Soporte integral para plataformas Peugeot, Citroën, DS y Opel moderno (arquitecturas PSA CAN2004 / CAN2010).
+- [ ] **Grupo BMW**: Integración de diagnosis y codificación (Línea K DS2, D-CAN, K-CAN y ENET).
+- [ ] **Marcas Japonesas**: Soporte especializado para Toyota, Honda y Nissan (ISO 14230, CAN y protocolos propietarios de fabricante).
+- [ ] **Grupo Ford**: Soporte multi-red (protocolos HS-CAN, MS-CAN y J1850 PWM).
+- [ ] **Resto de Fabricantes Globales**: Ampliación progresiva para el resto de marcas del mercado automotriz.
+
+### 📱 Futuro a Largo Plazo (Baja Prioridad)
+- [ ] **Conectividad Bluetooth / Inalámbrica**: Integración de adaptadores BLE y dongles inalámbricos (pospuesta a segundo plano para priorizar la profundidad técnica por cable y la cobertura de marcas).
 
 ---
 

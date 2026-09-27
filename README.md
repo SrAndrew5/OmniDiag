@@ -306,16 +306,25 @@ OmniDiag/
 
 ## 🗺 Roadmap
 
-- [x] Full VAG TP 2.0 implementation over CAN.
-- [x] Native KWP1281 implementation over K-Line Pin 7 with 5-baud init.
-- [x] 10 Guided Service Wizards (EPB, DPF, SRI, BEM, Injectors, ABS, ZF, G85, V157, MMI).
-- [x] Real-time vector oscilloscope with CAN performance chronometer.
-- [x] Smart DTC technical sheets with component physical locations.
-- [x] Forensic mileage cross-check auditor across 6 ECUs.
-- [x] Modular support for VW Polo 9N3 and Opel Corsa D.
-- [ ] Dedicated Fiat / Alfa Romeo K-Line and CAN implementation (KWP2000 / FIAT 9141).
-- [ ] Extended UDS ODX/PDX diagnostic database loader.
-- [ ] Bluetooth Low Energy (BLE) adapter driver for mobile/tablet platforms.
+### ✅ Completed & Active Support
+- [x] **Audi A6 C6 (2004–2011)**: Full CAN Bus support (TP 2.0 / KWP2000 / UDS) across all ECUs, 10 service wizards, smart DTC sheets, and forensic mileage auditing.
+- [x] **Opel Corsa D 2007 (Bus)**: Full CAN Bus support (High-Speed CAN & Low-Speed Single-Wire GMLAN) for engine, BCM, IPC, and EPS.
+- [x] **Volkswagen Polo 9N3 2007 (K-Line)**: Full K-Line support (Native KWP1281 / Pin 7 @ 10,400 baud) across all 8 modules, real adaptation channels, live actuator tests, and TDI telemetry.
+- [x] **Core Diagnostics Engine**: Vector telemetry oscilloscope, CAN dyno chronometer, differential backup manager with rollback, and automated HTML reporting.
+
+### 🎯 Immediate Next Milestone
+- [ ] **Fiat Group (K-Line)**: Complete K-Line support for Fiat, Alfa Romeo, and Lancia (KWP2000 / ISO 9141-2 / Fiatecuscan protocol via Pins 1, 7, and 9) for engine, ABS, airbag, and electric steering.
+
+### 🚀 Upcoming Vehicle Expansions
+- [ ] **Fiat Group (CAN Bus)**: Full CAN Bus support for Fiat/Alfa/Lancia (CAN High Speed 500k & B-CAN 50k body network, proxy alignment).
+- [ ] **Stellantis Group**: Full diagnostic support for Peugeot, Citroën, DS, and modern Opel platforms (PSA CAN2004 / CAN2010 architectures).
+- [ ] **BMW Group**: Diagnostic and coding integration (K-Line DS2, D-CAN, K-CAN, and ENET).
+- [ ] **Japanese Manufacturers**: Dedicated support for Toyota, Honda, and Nissan (ISO 14230, CAN, and proprietary protocols).
+- [ ] **Ford Group**: Multi-bus support (HS-CAN, MS-CAN, and J1850 PWM protocols).
+- [ ] **Further Global Brands**: Progressive expansion across remaining automotive manufacturers.
+
+### 📱 Long-Term / Low Priority
+- [ ] **Bluetooth / Wireless Connectivity**: Bluetooth Low Energy (BLE) and wireless dongle integration (deferred to prioritize wired diagnostic depth and protocol coverage).
 
 ---
 
