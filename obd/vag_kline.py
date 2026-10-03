@@ -481,7 +481,11 @@ class VAGKLinePort:
             return False
         try:
             self.ser.write(bytes([b & 0xFF]))
-            eco = self.ser.read(1)
+            # En la línea K física (Pin 7 half-duplex) se produce un eco en RX.
+            # Consumir el eco inmediatamente si está disponible sin bloquear la UI.
+            time.sleep(0.002)
+            if self.ser.in_waiting > 0:
+                self.ser.read(1)
             return True
         except Exception:
             return False
@@ -502,46 +506,71 @@ class VAGKLinePort:
                 self.ser.timeout = orig_timeout
 
     def init_5baud(self, address: int) -> Tuple[bool, Optional[int], Optional[int]]:
+        """
+        Inicialización lenta a 5 baudios (Slow Init) para KWP1281 / K-Line.
+        Utiliza bit-banging sobre la señal de BREAK de la UART para máxima compatibilidad
+        con drivers FTDI en Windows (donde SetCommState falla con WindowsError 87 al pedir baudrate=5).
+        """
         if not self.ser or not self.ser.is_open:
             return False, None, None
 
         try:
-            self.ser.close()
-            time.sleep(0.1)
-            self.ser.baudrate = 5
-            self.ser.bytesize = serial.SEVENBITS
-            self.ser.parity = serial.PARITY_EVEN
-            self.ser.stopbits = serial.STOPBITS_ONE
-            self.ser.open()
+            # 1. Asegurar estado idle de la línea K (Mark = nivel alto / inactivo)
+            self.ser.break_condition = False
             self.ser.reset_input_buffer()
+            self.ser.reset_output_buffer()
+            time.sleep(0.2)  # Pausa inicial de reposo
 
-            self.ser.write(bytes([address & 0x7F]))
-            time.sleep(2.0)
+            # 2. Generación de los 10 bits a 5 baudios (200 ms por bit exactos):
+            # Formato VAG: 1 Start bit (0/Space), 7 Data bits (LSB first), 1 Even Parity, 1 Stop bit (1/Mark)
+            data_bits = [(address >> i) & 1 for i in range(7)]
+            num_unos = sum(data_bits)
+            parity_bit = 1 if (num_unos % 2 != 0) else 0  # Paridad par
+            secuencia_bits = [0] + data_bits + [parity_bit, 1]
 
-            self.ser.close()
+            def _sleep_preciso(duracion_s: float):
+                fin = time.perf_counter() + duracion_s
+                while time.perf_counter() < fin:
+                    time.sleep(0.002)
+
+            for bit in secuencia_bits:
+                # En UART: bit 0 (Space) = TX a nivel bajo (Break activo)
+                #          bit 1 (Mark)  = TX a nivel alto (Break inactivo)
+                self.ser.break_condition = (bit == 0)
+                _sleep_preciso(0.200)
+
+            # 3. Tras el stop bit, desactivar break y limpiar residuos de eco/framing
+            self.ser.break_condition = False
             time.sleep(0.05)
-            self.ser.baudrate = self.baudrate
-            self.ser.bytesize = serial.EIGHTBITS
-            self.ser.parity = serial.PARITY_NONE
-            self.ser.stopbits = serial.STOPBITS_ONE
-            self.ser.timeout = 2.0
-            self.ser.open()
             self.ser.reset_input_buffer()
 
-            sync = self.read_byte(timeout=1.5)
+            # 4. Escuchar respuesta del ECU (Byte de sincronización 0x55)
+            # Primero a 9600 baudios, con fallback dinámico a 10400 (EDC15 TDI)
+            sync = self.read_byte(timeout=1.8)
+            if sync != 0x55:
+                nueva_vel = 10400 if self.baudrate == 9600 else 9600
+                self.ser.baudrate = nueva_vel
+                self.ser.reset_input_buffer()
+                sync = self.read_byte(timeout=1.0)
+                if sync == 0x55:
+                    self.baudrate = nueva_vel
+
             if sync != 0x55:
                 return False, None, None
 
+            # 5. Lectura de las KeyBytes (KB1 y KB2)
             kb1 = self.read_byte(timeout=0.8)
             kb2 = self.read_byte(timeout=0.8)
             if kb1 is None or kb2 is None:
                 return False, None, None
 
+            # 6. Responder con el complemento a 1 de KB2 (~KB2)
             ack_byte = (~kb2) & 0xFF
             time.sleep(0.03)
             self.write_byte(ack_byte)
 
-            ret_ack = self.read_byte(timeout=0.8)
+            # Pausa para sincronización
+            time.sleep(0.02)
             return True, kb1, kb2
 
         except Exception:
@@ -697,12 +726,25 @@ class VAGKLineClient:
             "codificacion": "N/A",
             "protocolo": "KWP1281"
         }
+        textos = []
         try:
-            bloque = self._recibir_bloque_kwp1281()
-            if bloque and "datos" in bloque:
-                raw_text = bloque["datos"].decode("ascii", errors="ignore").strip()
-                ident["referencia"] = raw_text[:11]
-                ident["componente"] = raw_text[11:]
+            # Drenar los bloques de identificación que el ECU envía tras el saludo inicial
+            for _ in range(5):
+                bloque = self._recibir_bloque_kwp1281(responder_ack=True)
+                if not bloque:
+                    break
+                titulo = bloque.get("titulo")
+                datos = bloque.get("datos", b"")
+                if titulo == 0xF6 or (datos and all(32 <= b <= 126 or b in (10, 13) for b in datos)):
+                    texto = datos.decode("ascii", errors="ignore").strip()
+                    if texto:
+                        textos.append(texto)
+                elif titulo == TITLE_ACK:
+                    break
+
+            if textos:
+                ident["referencia"] = textos[0][:11].strip()
+                ident["componente"] = " ".join(textos[1:]) if len(textos) > 1 else textos[0]
         except Exception:
             pass
         return ident
@@ -789,22 +831,26 @@ class VAGKLineClient:
             self.port.write_byte(b)
             time.sleep(0.005)
 
-    def _recibir_bloque_kwp1281(self) -> Optional[Dict[str, Any]]:
+    def _recibir_bloque_kwp1281(self, responder_ack: bool = True) -> Optional[Dict[str, Any]]:
         if not self.port:
             return None
-        longitud = self.port.read_byte(timeout=1.0)
+        longitud = self.port.read_byte(timeout=1.2)
         if not longitud or longitud < 3:
             return None
-        contador = self.port.read_byte()
-        titulo = self.port.read_byte()
+        contador = self.port.read_byte(timeout=0.5)
+        titulo = self.port.read_byte(timeout=0.5)
+        if contador is None or titulo is None:
+            return None
         datos_len = longitud - 3
         datos = bytearray()
         for _ in range(datos_len):
-            b = self.port.read_byte()
+            b = self.port.read_byte(timeout=0.3)
             if b is not None:
                 datos.append(b)
-        fin = self.port.read_byte()
-        self.port.write_byte(TITLE_ACK)
+        fin = self.port.read_byte(timeout=0.3)
+        # En KWP1281 oficial, se responde con un bloque ACK oficial a los bloques de datos/info
+        if responder_ack and titulo not in (TITLE_ACK, TITLE_END_COMM):
+            self._enviar_bloque_kwp1281(TITLE_ACK, b"")
         return {"titulo": titulo, "datos": bytes(datos)}
 
 
