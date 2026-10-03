@@ -491,18 +491,6 @@ class MainWindow(QMainWindow):
         btn.clicked.connect(self.iniciar_conexion)
         lyt.addWidget(btn)
 
-        # ── Acceso Rápido Asistente K-Line Polo 9N3 ──
-        btn_polo = QPushButton("🚗   ASISTENTE VAG K-LINE — VW POLO 9N3 (PQ24)")
-        btn_polo.setProperty("class", "btn-secundario")
-        btn_polo.setFixedHeight(44)
-        btn_polo.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_polo.setStyleSheet(
-            "background-color: #131E32; color: #38BDF8; border: 1px solid #1E2E4A; "
-            "border-radius: 7px; font-weight: 700; font-size: 13px;"
-        )
-        btn_polo.clicked.connect(self._abrir_asistente_polo_kline)
-        lyt.addWidget(btn_polo)
-
         lyt.addStretch()
         self.stack.addWidget(page)
 
@@ -1344,7 +1332,8 @@ class MainWindow(QMainWindow):
 
         col_orig = QVBoxLayout()
         col_orig.setSpacing(3)
-        col_orig.addWidget(QLabel("Coding Original (Leído de la centralita):"))
+        self.lbl_coding_orig_t = QLabel("Coding Original (Leído de la centralita):")
+        col_orig.addWidget(self.lbl_coding_orig_t)
         self.txt_coding_actual = QLineEdit()
         self.txt_coding_actual.setObjectName("txt_coding")
         self.txt_coding_actual.setReadOnly(True)
@@ -1355,7 +1344,8 @@ class MainWindow(QMainWindow):
 
         col_nuevo = QVBoxLayout()
         col_nuevo.setSpacing(3)
-        col_nuevo.addWidget(QLabel("Nuevo Coding (Resultado en vivo):"))
+        self.lbl_coding_nuevo_t = QLabel("Nuevo Coding (Resultado en vivo):")
+        col_nuevo.addWidget(self.lbl_coding_nuevo_t)
         self.txt_coding_nuevo = QLineEdit()
         self.txt_coding_nuevo.setObjectName("txt_coding")
         self.txt_coding_nuevo.setPlaceholderText("Se actualiza al activar funciones o editar bits...")
@@ -1955,7 +1945,10 @@ class MainWindow(QMainWindow):
             self.dot_status.setStyleSheet(f"color: {c}; font-size: 15px; font-weight: bold;")
 
     def recibir_vin(self, vin: str):
-        self.lbl_vin.setText(vin)
+        if self.es_modo_kline:
+            self.lbl_vin.setText(f"{vin} (VW Polo 9N3)")
+        else:
+            self.lbl_vin.setText(vin)
         self.lbl_sesion_num.setText(f"# {self.worker.sesion_id}")
 
     def actualizar_mil(self, encendida: bool):
@@ -2181,9 +2174,25 @@ class MainWindow(QMainWindow):
                 self.escribir_consola(f"[WARN] No se pudo crear auto-backup de lectura: {e}")
 
     def recibir_adaptacion(self, nombre: str, valor: float):
-        """Actualiza el SpinBox de la adaptación leída."""
+        """Actualiza el SpinBox de la adaptación leída y sincroniza los botones de confort en tiempo real."""
         if nombre in self._adaptaciones_spin:
             self._adaptaciones_spin[nombre].setValue(valor)
+
+        if self.es_modo_kline:
+            if not hasattr(self, "_polo_confort_estados"):
+                self._polo_confort_estados = {}
+            for item, btn in self._confort_botones:
+                if item.get("nombre") == nombre or item.get("id") == nombre:
+                    activo = (int(valor) != 0)
+                    self._polo_confort_estados[item.get("id", item["nombre"])] = activo
+                    if activo:
+                        btn.setText("✓ ACTIVADO")
+                        btn.setProperty("class", "btn-confort-activo")
+                    else:
+                        btn.setText("○ DESACTIVADO")
+                        btn.setProperty("class", "btn-confort-inactivo")
+                    btn.style().unpolish(btn)
+                    btn.style().polish(btn)
 
     # ══════════════════════════════════════════════════════════════════════════
     #  LONG CODING & FUNCIONES DE CONFORT AUDI A6
@@ -2202,6 +2211,19 @@ class MainWindow(QMainWindow):
             if item.widget():
                 item.widget().deleteLater()
         self._confort_botones.clear()
+
+        if hasattr(self, "tabs_coding"):
+            if self.es_modo_kline:
+                self.tabs_coding.setTabText(0, "🚗  Canales de Confort — VW Polo 9N3 (KWP1281)")
+                self.tabs_coding.setTabVisible(1, False)
+            elif self.es_modo_opel:
+                self.tabs_coding.setTabText(0, "🚗  Funciones de Confort — Opel Corsa D")
+                self.tabs_coding.setTabVisible(1, True)
+                self.tabs_coding.setTabText(1, "🔧  Editor Avanzado de Variantes (GM)")
+            else:
+                self.tabs_coding.setTabText(0, "🚗  Funciones de Confort — Audi A6 (Texto Claro)")
+                self.tabs_coding.setTabVisible(1, True)
+                self.tabs_coding.setTabText(1, "🔧  Editor Avanzado Bit a Bit (VCDS Raw)")
 
         if self.es_modo_opel:
             funciones = CATALOGO_CONFORT_OPEL.get(modulo, [])
@@ -2237,9 +2259,10 @@ class MainWindow(QMainWindow):
         for item in funciones:
             card = QFrame()
             card.setObjectName("card_confort")
+            card.setMinimumHeight(56)
             c_lyt = QHBoxLayout(card)
-            c_lyt.setContentsMargins(14, 10, 14, 10)
-            c_lyt.setSpacing(12)
+            c_lyt.setContentsMargins(16, 12, 16, 12)
+            c_lyt.setSpacing(14)
 
             col_info = QVBoxLayout()
             col_info.setSpacing(4)
@@ -2794,6 +2817,8 @@ class MainWindow(QMainWindow):
             config.MODE = "real"
 
         if idx in (1, 5):  # Modos VW Polo 9N3 K-Line
+            if hasattr(self, "btn_nav") and len(self.btn_nav) > 4:
+                self.btn_nav[4].setText("🔧  Soft Coding")
             if hasattr(self, "lbl_vin"):
                 self.lbl_vin.setText("6Q0959433E (VW Polo 9N3)")
             if hasattr(self, "lbl_vehiculo_desc"):
@@ -2803,7 +2828,7 @@ class MainWindow(QMainWindow):
             if hasattr(self, "lbl_red"):
                 self.lbl_red.setText("K-LINE: 10.4 kbps")
 
-            self._coding_actual_leido = "00067"
+            self._coding_actual_leido = "00019"
             if hasattr(self, "txt_coding_actual"):
                 self.txt_coding_actual.setText(self._coding_actual_leido)
             if hasattr(self, "txt_coding_nuevo"):
@@ -2823,14 +2848,22 @@ class MainWindow(QMainWindow):
                     "Se han filtrado automáticamente los sistemas no equipados (Caja automática, DPF, EPB, BEM, MMI)."
                 )
 
-            # Aislamiento Long Coding Polo 9N3
+            # Aislamiento Soft Coding Polo 9N3
             if hasattr(self, "lbl_coding_titulo"):
-                self.lbl_coding_titulo.setText("Codificación y Confort — VW Polo 9N3 (PQ24 K-Line)")
+                self.lbl_coding_titulo.setText("Soft Coding y Confort — VW Polo 9N3 (PQ24 K-Line)")
             if hasattr(self, "lbl_coding_subtitulo"):
                 self.lbl_coding_subtitulo.setText(
                     "Activa o desactiva funciones de confort adaptadas para VW Polo 9N3 (KWP1281). "
                     "En la plataforma PQ24 la configuración se realiza mediante canales de adaptación y codificación corta (Soft Coding)."
                 )
+            if hasattr(self, "lbl_coding_orig_t"):
+                self.lbl_coding_orig_t.setText("Soft Coding Original (Leído de EEPROM):")
+            if hasattr(self, "lbl_coding_nuevo_t"):
+                self.lbl_coding_nuevo_t.setText("Nuevo Soft Coding / Canal (Resultado en vivo):")
+            if hasattr(self, "txt_coding_actual"):
+                self.txt_coding_actual.setPlaceholderText("Pulsa 'Leer Coding Actual' para leer la EEPROM...")
+            if hasattr(self, "txt_coding_nuevo"):
+                self.txt_coding_nuevo.setPlaceholderText("Se actualiza al seleccionar opciones de confort...")
             if hasattr(self, "btn_needle"):
                 self.btn_needle.setVisible(False)
             if hasattr(self, "btn_gw"):
@@ -2896,6 +2929,12 @@ class MainWindow(QMainWindow):
             self._actualizar_estado_botones_confort()
 
         elif idx in (2, 3, 6):  # Modos Opel
+            if hasattr(self, "btn_nav") and len(self.btn_nav) > 4:
+                self.btn_nav[4].setText("🔧  Codificación")
+            if hasattr(self, "lbl_coding_orig_t"):
+                self.lbl_coding_orig_t.setText("Codificación Actual (BCM / IPC):")
+            if hasattr(self, "lbl_coding_nuevo_t"):
+                self.lbl_coding_nuevo_t.setText("Nueva Codificación:")
             if hasattr(self, "lbl_vin"):
                 self.lbl_vin.setText("W0L0SDL6874086807")
             if hasattr(self, "lbl_vehiculo_desc"):
@@ -2981,6 +3020,16 @@ class MainWindow(QMainWindow):
             self._actualizar_estado_botones_confort()
         else:  # Audi / VAG (0 o 4)
             config.VEHICLE_MODE = "VAG"
+            if hasattr(self, "btn_nav") and len(self.btn_nav) > 4:
+                self.btn_nav[4].setText("🔧  Long Coding")
+            if hasattr(self, "lbl_coding_orig_t"):
+                self.lbl_coding_orig_t.setText("Coding Original (Leído de la centralita):")
+            if hasattr(self, "lbl_coding_nuevo_t"):
+                self.lbl_coding_nuevo_t.setText("Nuevo Coding (Resultado en vivo):")
+            if hasattr(self, "txt_coding_actual"):
+                self.txt_coding_actual.setPlaceholderText("Pulsa 'Leer Coding Actual'...")
+            if hasattr(self, "txt_coding_nuevo"):
+                self.txt_coding_nuevo.setPlaceholderText("Se actualiza al activar funciones o editar bits...")
             if hasattr(self, "lbl_vin"):
                 self.lbl_vin.setText("WAUZZZ4F000000000")
             if hasattr(self, "lbl_vehiculo_desc"):

@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
 test_kline_suite.py — Suite de Pruebas Unitarias para el Motor VAG K-Line
 Verifica:
@@ -82,6 +82,7 @@ class TestVAGKLine(unittest.TestCase):
 
     def test_06_dialogo_ui(self):
         dlg = DialogoPoloKLine()
+        dlg.combo_puerto.setCurrentText("MOCK")
         dlg._toggle_conexion()
         self.assertTrue(dlg.cliente.conectado)
         dlg._cambiar_canal(6, 0)

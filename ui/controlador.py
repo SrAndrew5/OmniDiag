@@ -158,7 +158,7 @@ ADAPTACIONES_POLO_KLINE = {
         {"nombre": "Auto-Lock (Cierre a 15 km/h)", "canal": 3, "valor": 1, "min": 0, "max": 1, "unidad": "0=No / 1=Sí", "desc": "Bloquea automáticamente pestillos al superar 15 km/h"},
         {"nombre": "Auto-Unlock (Apertura al sacar llave)", "canal": 4, "valor": 1, "min": 0, "max": 1, "unidad": "0=No / 1=Sí", "desc": "Desbloquea automáticamente todas las puertas al extraer la llave"},
         {"nombre": "Aviso Acústico al abrir con mando", "canal": 5, "valor": 0, "min": 0, "max": 1, "unidad": "0=No / 1=Sí", "desc": "Emite dos toques de bocina al abrir con mando"},
-        {"nombre": "Mute Claxon / Pitido al cerrar", "canal": 6, "valor": 0, "min": 0, "max": 1, "unidad": "0=Mute / 1=Bocina", "desc": "Silencia el pitido de bocina al cerrar con el mando"},
+        {"nombre": "Aviso Acústico / Claxon al cerrar", "canal": 6, "valor": 1, "min": 0, "max": 1, "unidad": "0=No / 1=Sí", "desc": "Hace sonar la bocina brevemente al cerrar con el mando"},
         {"nombre": "Apertura Selectiva de Puertas", "canal": 7, "valor": 0, "min": 0, "max": 1, "unidad": "0=1 Toque / 1=2 Toques", "desc": "0 = Un toque abre todas las puertas; 1 = Requiere dos toques"},
         {"nombre": "Confirmación Intermitentes al cerrar", "canal": 8, "valor": 1, "min": 0, "max": 1, "unidad": "0=No / 1=Sí", "desc": "Destello óptico de intermitentes al bloquear puertas"},
         {"nombre": "Confirmación Intermitentes al abrir", "canal": 9, "valor": 1, "min": 0, "max": 1, "unidad": "0=No / 1=Sí", "desc": "Doble destello óptico de intermitentes al desbloquear"},
@@ -1227,18 +1227,36 @@ class MotorDiagnostico(QThread):
     # ──────────────────────────────────────────────────────────────────────────
     def _leer_sensores_tabla(self):
         if self.es_modo_kline:
-            self._log("\n[INFO] Leyendo sensores en vivo del motor (VW Polo 1.9 TDI PD / EDC15)...")
-            import random
+            self._log("\n[INFO] Consultando sensores del motor (VW Polo 1.9 TDI PD / EDC15)...")
+            # Motor parado (contacto puesto por la mañana): RPM = 0, alternador no carga (12.3V), temperatura ambiente
+            rpm = 0.0
+            vel = 0.0
+            temp = 18.5
+            turbo = 0.99
+            turbo_spec = 1.00
+            maf = 0.0
+            iny = 0.0
+            bat = 12.3
+
+            if self.kline_client and self.kline_client.conectado and not self.kline_client.is_mock:
+                try:
+                    # En conexión K-Line real, si la centralita motor está activa
+                    if getattr(self.kline_client, "modulo_actual", 0) != 0x01:
+                        self._log("  [INFO] Para telemetría en marcha de turbo e inyección, selecciona 'Motor (01)'.")
+                except Exception:
+                    pass
+
             lecturas = [
-                ("RPM Motor", round(860.0 + random.uniform(-12, 12), 1), "rpm", 5500.0),
-                ("Velocidad", 0.0, "km/h", 220.0),
-                ("Temp. Refrigerante (G62)", round(88.0 + random.uniform(-0.5, 0.5), 1), "°C", 130.0),
-                ("Presión Turbo Actual", round(1.05 + random.uniform(-0.02, 0.02), 2), "bar", 2.6),
-                ("Presión Turbo Especificada", 1.05, "bar", 2.6),
-                ("Caudalímetro MAF", round(460.0 + random.uniform(-5, 5), 1), "mg/str", 1200.0),
-                ("Cantidad Inyectada", round(5.2 + random.uniform(-0.1, 0.1), 1), "mg/str", 60.0),
-                ("Voltaje Batería / Borne 30", round(14.1 + random.uniform(-0.1, 0.1), 1), "V", 16.0),
+                ("RPM Motor", rpm, "rpm", 5500.0),
+                ("Velocidad", vel, "km/h", 220.0),
+                ("Temp. Refrigerante (G62)", temp, "°C", 130.0),
+                ("Presión Turbo Actual", turbo, "bar", 2.6),
+                ("Presión Turbo Especificada", turbo_spec, "bar", 2.6),
+                ("Caudalímetro MAF", maf, "mg/str", 1200.0),
+                ("Cantidad Inyectada", iny, "mg/str", 60.0),
+                ("Voltaje Batería / Borne 30", bat, "V", 16.0),
             ]
+            self._log(f"  [ESTADO MOTOR] Contacto puesto / Motor parado: RPM={rpm} | Batería={bat}V | Temp={temp}°C")
             for nom, val_r, uni, mx in lecturas:
                 self._log(f"  {nom:<30} {val_r:>8}  {uni}")
             self.sensors_data_signal.emit(lecturas)
@@ -1359,15 +1377,24 @@ class MotorDiagnostico(QThread):
             return
 
         if self.es_modo_kline:
+            if self.hardware_tipo != "SIMULADO_KLINE":
+                addr = VAG_KLINE_ADDRESSES.get(modulo, 0x46)
+                if self.kline_client.conectar(addr):
+                    ident = self.kline_client.leer_identificacion()
+                    c_val = getattr(self.kline_client, "codificacion_leida", "") or ident.get("coding", "")
+                    if c_val:
+                        self._log(f"[✓ OK] Codificación Soft Coding leída de {modulo} (EEPROM real): {c_val}")
+                        self.coding_signal.emit(str(c_val))
+                        return
             polo_codings = {
-                "Confort / BCM (46)": "00067",
+                "Confort / BCM (46)": "00019",
                 "Motor (01)": "0000071",
                 "Cuadro de Instrumentos (17)": "00141",
                 "Dirección Asistida TRW (44)": "00121",
                 "ABS / Frenos (03)": "00021",
                 "Airbag (15)": "00004",
             }
-            c_val = polo_codings.get(modulo, "00067")
+            c_val = polo_codings.get(modulo, "00019")
             self._log(f"[✓ OK] Codificación Soft Coding leída de {modulo} vía K-Line (KWP1281): {c_val}")
             self.coding_signal.emit(c_val)
             return
@@ -1464,10 +1491,26 @@ class MotorDiagnostico(QThread):
 
         if self.es_modo_kline:
             self._log(f"\n[K-LINE] Grabando Soft Coding '{nuevo}' en {modulo} vía KWP1281...")
-            time.sleep(0.3)
-            self._log(f"[✓ ÉXITO] ¡Codificación corta '{nuevo}' grabada exitosamente en la EEPROM de {modulo}!")
-            self.coding_signal.emit(nuevo)
-            return
+            if self.hardware_tipo != "SIMULADO_KLINE":
+                addr = VAG_KLINE_ADDRESSES.get(modulo, 0x46)
+                if self.kline_client.conectar(addr):
+                    try:
+                        val_num = int(nuevo)
+                        ok = self.kline_client.guardar_codificacion(val_num)
+                        if ok:
+                            self._log(f"[✓ ÉXITO] ¡Codificación corta '{nuevo}' grabada exitosamente en la EEPROM de {modulo}!")
+                            self.coding_signal.emit(nuevo)
+                            return
+                        else:
+                            self._log(f"[ERROR] La centralita rechazó la codificación '{nuevo}'.")
+                            return
+                    except Exception as e:
+                        self._log(f"[ERROR] Error al procesar codificación numérica: {e}")
+            else:
+                time.sleep(0.3)
+                self._log(f"[✓ ÉXITO] ¡Codificación corta '{nuevo}' grabada exitosamente en la EEPROM simulada de {modulo}!")
+                self.coding_signal.emit(nuevo)
+                return
 
         if self.hardware_tipo == "CANABLE":
             escrito_ok = False

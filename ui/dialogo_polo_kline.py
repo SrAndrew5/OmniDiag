@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
 ui/dialogo_polo_kline.py
 ══════════════════════════════════════════════════════════════════════════════
@@ -150,8 +150,21 @@ class DialogoPoloKLine(QDialog):
         c_tit.setStyleSheet("font-size: 14px; font-weight: bold; color: #F8FAFC;")
         c_lyt.addWidget(c_tit)
 
+        # Aviso sobre requisitos físicos de la centralita Confort
+        lbl_aviso_seguridad = QLabel(
+            "⚠️ Requisitos de la centralita Confort (46) para permitir guardar cambios:\n"
+            "• TODAS LAS PUERTAS DEBEN ESTAR BIEN CERRADAS (si la del conductor está abierta, la ECU bloquea la EEPROM).\n"
+            "• Contacto de la llave puesto (luces del cuadro encendidas)."
+        )
+        lbl_aviso_seguridad.setStyleSheet(
+            "background-color: #1E293B; border-left: 4px solid #F59E0B; "
+            "color: #CBD5E1; padding: 8px 12px; border-radius: 4px; font-size: 11px; margin-top: 4px; margin-bottom: 8px;"
+        )
+        c_lyt.addWidget(lbl_aviso_seguridad)
+
         # Grid de Canales
         self.filas_canales = {}
+        self.botones_canales = {}
         for canal, info in POLO_9N3_CONFORT_CHANNELS.items():
             f_box = QHBoxLayout()
             c_desc = QVBoxLayout()
@@ -167,6 +180,7 @@ class DialogoPoloKLine(QDialog):
             self.filas_canales[canal] = lbl_val
 
             btn_accion = QPushButton()
+            btn_accion.setMinimumWidth(150)
             if canal == 6:
                 btn_accion.setText("🔇 Silenciar Pitido")
                 btn_accion.setProperty("class", "btn-success")
@@ -183,6 +197,7 @@ class DialogoPoloKLine(QDialog):
                 btn_accion.setText("🔒 Conmutar Antiasalto")
                 btn_accion.clicked.connect(lambda _, c=canal: self._toggle_canal(c))
 
+            self.botones_canales[canal] = btn_accion
             f_box.addLayout(c_desc, stretch=3)
             f_box.addWidget(lbl_val, stretch=2)
             f_box.addWidget(btn_accion, stretch=1)
@@ -245,9 +260,18 @@ class DialogoPoloKLine(QDialog):
                 self.lbl_estado_ecu.setStyleSheet("font-size: 12px; color: #4ADE80; font-weight: bold;")
                 self.btn_conectar.setText("🔴 Desconectar")
                 self._actualizar_canales_ui()
-                self._escanear_modulo(0x46)
+                # Leer averías de confort sin forzar reconexión innecesaria
+                fallos = self.cliente.leer_dtcs()
+                self._cargar_tabla_fallos(fallos)
             else:
-                QMessageBox.critical(self, "Error de Conexión", f"No se pudo conectar al puerto {puerto} a 10.400 baudios.")
+                err = getattr(self.cliente, "ultimo_error", "") or f"No se pudo conectar al puerto {puerto} a 10.400 baudios."
+                QMessageBox.critical(
+                    self,
+                    "Error de Conexión",
+                    f"No se pudo conectar con el Polo 9N3:\n\n{err}\n\n"
+                    f"🔑 Comprobación obligatoria:\n"
+                    f"¿Tienes el CONTACTO PUESTO con la llave? (Gira la llave hasta que se enciendan los testigos de la batería, aceite, etc. del cuadro sin arrancar)."
+                )
         else:
             self.cliente.desconectar()
             self.lbl_estado_ecu.setText("⚪ Estado: Desconectado.")
@@ -262,12 +286,120 @@ class DialogoPoloKLine(QDialog):
             if val is not None:
                 opc_str = POLO_9N3_CONFORT_CHANNELS[canal]["opciones"].get(val, f"Valor {val}")
                 lbl.setText(f"Valor: {val} ({opc_str})")
+                btn = self.botones_canales.get(canal)
                 if canal == 6:
                     lbl.setStyleSheet("font-weight: bold; color: #10B981;" if val == 0 else "font-weight: bold; color: #F43F5E;")
+                    if btn:
+                        try:
+                            btn.clicked.disconnect()
+                        except Exception:
+                            pass
+                        if val == 1:
+                            btn.setText("🔇 Silenciar Pitido")
+                            btn.setProperty("class", "btn-warning")
+                            btn.clicked.connect(lambda _, c=canal: self._cambiar_canal(c, 0))
+                        else:
+                            btn.setText("🔊 Activar Bocina")
+                            btn.setProperty("class", "btn-success")
+                            btn.clicked.connect(lambda _, c=canal: self._cambiar_canal(c, 1))
+                        btn.style().unpolish(btn)
+                        btn.style().polish(btn)
                 elif canal == 4:
                     lbl.setStyleSheet("font-weight: bold; color: #10B981;" if val == 1 else "font-weight: bold; color: #F59E0B;")
+                    if btn:
+                        try:
+                            btn.clicked.disconnect()
+                        except Exception:
+                            pass
+                        if val == 1:
+                            btn.setText("🔒 Quitar Auto-Unlock")
+                            btn.setProperty("class", "btn-warning")
+                            btn.clicked.connect(lambda _, c=canal: self._cambiar_canal(c, 0))
+                        else:
+                            btn.setText("🔓 Activar Auto-Unlock")
+                            btn.setProperty("class", "btn-success")
+                            btn.clicked.connect(lambda _, c=canal: self._cambiar_canal(c, 1))
+                        btn.style().unpolish(btn)
+                        btn.style().polish(btn)
+                elif canal == 7:
+                    lbl.setStyleSheet("font-weight: bold; color: #38BDF8;")
+                    if btn:
+                        try:
+                            btn.clicked.disconnect()
+                        except Exception:
+                            pass
+                        if val == 1:
+                            btn.setText("🔑 1 Toque Abre Todo")
+                            btn.clicked.connect(lambda _, c=canal: self._cambiar_canal(c, 0))
+                        else:
+                            btn.setText("🗝️ Apertura Selectiva (2T)")
+                            btn.clicked.connect(lambda _, c=canal: self._cambiar_canal(c, 1))
+                elif canal == 3:
+                    lbl.setStyleSheet("font-weight: bold; color: #38BDF8;")
+                    if btn:
+                        try:
+                            btn.clicked.disconnect()
+                        except Exception:
+                            pass
+                        if val == 1:
+                            btn.setText("🔓 Quitar Cierre 15km/h")
+                            btn.clicked.connect(lambda _, c=canal: self._cambiar_canal(c, 0))
+                        else:
+                            btn.setText("🔒 Activar Cierre 15km/h")
+                            btn.clicked.connect(lambda _, c=canal: self._cambiar_canal(c, 1))
+                elif canal == 5:
+                    lbl.setStyleSheet("font-weight: bold; color: #10B981;" if val == 1 else "font-weight: bold; color: #64748B;")
+                    if btn:
+                        try:
+                            btn.clicked.disconnect()
+                        except Exception:
+                            pass
+                        if val == 1:
+                            btn.setText("🔇 Quitar Aviso al Abrir")
+                            btn.clicked.connect(lambda _, c=canal: self._cambiar_canal(c, 0))
+                        else:
+                            btn.setText("🔊 Activar Aviso al Abrir")
+                            btn.clicked.connect(lambda _, c=canal: self._cambiar_canal(c, 1))
+                elif canal in (8, 9):
+                    lbl_t = "Cerrar" if canal == 8 else "Abrir"
+                    lbl.setStyleSheet("font-weight: bold; color: #10B981;" if val == 1 else "font-weight: bold; color: #64748B;")
+                    if btn:
+                        try:
+                            btn.clicked.disconnect()
+                        except Exception:
+                            pass
+                        if val == 1:
+                            btn.setText(f"⚪ Quitar Destello al {lbl_t}")
+                            btn.clicked.connect(lambda _, c=canal: self._cambiar_canal(c, 0))
+                        else:
+                            btn.setText(f"✨ Activar Destello al {lbl_t}")
+                            btn.clicked.connect(lambda _, c=canal: self._cambiar_canal(c, 1))
+                elif canal == 14:
+                    lbl.setStyleSheet("font-weight: bold; color: #10B981;" if val == 1 else "font-weight: bold; color: #64748B;")
+                    if btn:
+                        try:
+                            btn.clicked.disconnect()
+                        except Exception:
+                            pass
+                        if val == 1:
+                            btn.setText("❌ Quitar Elevalunas Mando")
+                            btn.clicked.connect(lambda _, c=canal: self._cambiar_canal(c, 0))
+                        else:
+                            btn.setText("🪟 Activar Elevalunas Mando")
+                            btn.clicked.connect(lambda _, c=canal: self._cambiar_canal(c, 1))
                 else:
                     lbl.setStyleSheet("font-weight: bold; color: #38BDF8;")
+                    if btn:
+                        try:
+                            btn.clicked.disconnect()
+                        except Exception:
+                            pass
+                        if val == 1:
+                            btn.setText(f"Desactivar Canal {canal:02d}")
+                            btn.clicked.connect(lambda _, c=canal: self._cambiar_canal(c, 0))
+                        else:
+                            btn.setText(f"Activar Canal {canal:02d}")
+                            btn.clicked.connect(lambda _, c=canal: self._cambiar_canal(c, 1))
 
     def _cambiar_canal(self, canal: int, nuevo_valor: int):
         if not self.cliente.conectado:
@@ -280,26 +412,46 @@ class DialogoPoloKLine(QDialog):
             QMessageBox.information(self, "Canal Guardado", f"Canal {canal:02d} ({info['nombre']}) modificado con éxito:\n\nNuevo Estado: {opc}")
             self._actualizar_canales_ui()
         else:
-            QMessageBox.critical(self, "Error", f"No se pudo guardar el valor en el Canal {canal:02d}.")
+            err = getattr(self.cliente, "ultimo_error", "") or "La centralita no aceptó la modificación."
+            QMessageBox.critical(
+                self,
+                "Error al Guardar Adaptación",
+                f"No se pudo guardar el valor en el Canal {canal:02d}.\n\n"
+                f"Diagnóstico:\n{err}\n\n"
+                f"💡 Comprobaciones clave en el Polo:\n"
+                f"1. Cierra TODAS las puertas del coche (si la puerta del conductor está entreabierta o abierta por el cable, la centralita bloquea la escritura por seguridad).\n"
+                f"2. Asegúrate de tener el contacto puesto (luces del cuadro encendidas)."
+            )
 
     def _toggle_canal(self, canal: int):
         val_actual = self.cliente.leer_canal_adaptacion(canal) or 0
         nuevo = 0 if val_actual == 1 else 1
         self._cambiar_canal(canal, nuevo)
 
-    def _escanear_modulo(self, addr: int):
-        if not self.cliente.conectado:
-            QMessageBox.warning(self, "Aviso", "Primero conecta con el cable K-Line.")
-            return
-        self.cliente.conectar(addr)
-        fallos = self.cliente.leer_dtcs()
+    def _cargar_tabla_fallos(self, fallos: list):
         self.tabla_dtc.setRowCount(0)
         for f in fallos:
             row = self.tabla_dtc.rowCount()
             self.tabla_dtc.insertRow(row)
-            self.tabla_dtc.setItem(row, 0, QTableWidgetItem(f["codigo"]))
-            self.tabla_dtc.setItem(row, 1, QTableWidgetItem(f["desc"]))
-            self.tabla_dtc.setItem(row, 2, QTableWidgetItem(f["estado"]))
+            self.tabla_dtc.setItem(row, 0, QTableWidgetItem(f.get("codigo", "")))
+            self.tabla_dtc.setItem(row, 1, QTableWidgetItem(f.get("desc", "")))
+            self.tabla_dtc.setItem(row, 2, QTableWidgetItem(f.get("estado", "")))
+
+    def _escanear_modulo(self, addr: int):
+        if not self.cliente.conectado:
+            QMessageBox.warning(self, "Aviso", "Primero conecta con el cable K-Line.")
+            return
+        if self.cliente.modulo_actual != addr:
+            ok = self.cliente.conectar(addr)
+            if not ok:
+                QMessageBox.critical(self, "Error", f"No se pudo conectar al módulo 0x{addr:02X}.")
+                return
+            ident = self.cliente.leer_identificacion()
+            ref = ident.get("referencia", "OK")
+            comp = ident.get("componente", "OK")
+            self.lbl_estado_ecu.setText(f"🟢 CONECTADO a 0x{addr:02X} | ECU: {ref} — {comp}")
+        fallos = self.cliente.leer_dtcs()
+        self._cargar_tabla_fallos(fallos)
 
     def _borrar_averias(self):
         if not self.cliente.conectado:

@@ -77,7 +77,7 @@ class TestPoloMainIntegration(unittest.TestCase):
         # Verificar spinboxes de adaptación en Confort (46)
         self.assertIn("Auto-Lock (Cierre a 15 km/h)", self.win._adaptaciones_spin)
         self.assertIn("Auto-Unlock (Apertura al sacar llave)", self.win._adaptaciones_spin)
-        self.assertIn("Mute Claxon / Pitido al cerrar", self.win._adaptaciones_spin)
+        self.assertIn("Aviso Acústico / Claxon al cerrar", self.win._adaptaciones_spin)
         self.assertIn("Apertura Selectiva de Puertas", self.win._adaptaciones_spin)
 
     def test_03_conexion_worker_polo(self):
