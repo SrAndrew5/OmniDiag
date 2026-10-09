@@ -503,8 +503,14 @@ class VAGServiceWizards:
 
         try:
             self.can.flush_rx()
-            if not self.tp20.open_channel(0x19, retries=2):
-                return False, "No se pudo conectar con el Gateway CAN (Módulo 19)."
+            conectado = False
+            for addr in (0x19, 0x61):
+                if self.tp20.open_channel(addr, retries=2):
+                    conectado = True
+                    break
+
+            if not conectado:
+                return False, "No se pudo conectar con el Gestor de Batería BEM (Módulo 19 / 61). Verifica contacto encendido."
 
             self.kwp.start_diagnostic_session(0x86)
             time.sleep(0.05)
@@ -548,8 +554,14 @@ class VAGServiceWizards:
 
         try:
             self.can.flush_rx()
-            if not self.tp20.open_channel(0x19, retries=2):
-                return False, "No se pudo conectar con el Gateway CAN (Módulo 19).", info
+            conectado = False
+            for addr in (0x19, 0x61):
+                if self.tp20.open_channel(addr, retries=2):
+                    conectado = True
+                    break
+
+            if not conectado:
+                return False, "No se pudo conectar con el Gestor de Batería BEM (Módulo 19 / 61).", info
 
             self.kwp.start_diagnostic_session(0x86)
             time.sleep(0.05)
