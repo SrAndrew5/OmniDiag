@@ -74,10 +74,7 @@ class AudiA6Actions:
                     except Exception:
                         pass
 
-                    self._emit("Enviando código de seguridad 13861...")
-                    self.kwp.security_access(13861)
-                    time.sleep(0.05)
-                    self._emit("Escribiendo nueva codificación vía TP 2.0...")
+                    self._emit("Escribiendo nueva codificación vía TP 2.0 (sin SecurityAccess restrictivo)...")
                     if self.kwp.write_coding(bytes(coding_list)):
                         time.sleep(0.1)
                         verified_coding = self.kwp.read_coding()
@@ -138,13 +135,6 @@ class AudiA6Actions:
                 )
             except Exception:
                 pass
-
-            # Acceso de seguridad UDS si es necesario
-            try:
-                uds.security_access(13861)
-            except Exception:
-                pass
-            time.sleep(0.05)
 
             self._emit(f"Grabando codificación en DID 0x{target_did:04X}...")
             if not uds.write_data_by_identifier(target_did, bytes(coding_list)):
