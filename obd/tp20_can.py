@@ -594,6 +594,7 @@ class KWP2000NativeClient:
         2. Servicio 0x1A con subfunción 0x9B (Identification general).
         3. Identificador UDS/KWP (Service 0x22 DID 0x0600 / 0x0601 / 0xF1A0).
         """
+        self.last_read_source = None
         for subfn in (0x9E, 0x9B, 0x80, 0x91):
             try:
                 resp = self.execute_service(0x1A, subfunction=subfn)
@@ -602,6 +603,7 @@ class KWP2000NativeClient:
                         coding = resp[1:] if (len(resp) > 1 and resp[0] == 0x9E) else resp
                         if len(coding) >= 1:
                             diag_logger.log_info(f"[KWP] Codificación leída vía 0x1A 0x9E ({len(coding)} bytes): {coding.hex()}")
+                            self.last_read_source = "0x1A 0x9E"
                             return bytes(coding)
 
                     elif len(resp) >= 18:
@@ -609,6 +611,7 @@ class KWP2000NativeClient:
                         if 1 <= coding_len <= 32 and (18 + coding_len) <= len(resp):
                             coding_bytes = resp[18:18 + coding_len]
                             diag_logger.log_info(f"[KWP] Codificación leída ({coding_len} bytes) en 0x1A 0x{subfn:02X}: {coding_bytes.hex()}")
+                            self.last_read_source = f"0x1A 0x{subfn:02X}"
                             return bytes(coding_bytes)
             except Exception:
                 continue
@@ -619,6 +622,7 @@ class KWP2000NativeClient:
                 resp = self.execute_service(0x22, subfunction=None, data=bytes([did >> 8, did & 0xFF]))
                 if resp and len(resp) >= 2:
                     data = resp[2:] if len(resp) >= 4 else resp
+                    self.last_read_source = f"0x22 0x{did:04X}"
                     return bytes(data)
             except Exception:
                 continue

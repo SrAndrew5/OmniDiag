@@ -30,7 +30,19 @@ class AudiA6Actions:
             self._log(msg)
         except Exception:
             print(msg)
-        diag_logger.log_info(f"[A6 ACTION] {msg}")
+    def _rollback(self, original: bytes) -> bool:
+        """
+        Restaura la codificación original y re-lee obligatoriamente para verificar
+        que la centralita realmente tiene la configuración previa en su EEPROM.
+        """
+        try:
+            ok = self.kwp.write_coding(bytes(original))
+            time.sleep(0.1)
+            back = self.kwp.read_coding()
+            return bool(ok and back and bytes(back) == bytes(original))
+        except Exception as e:
+            self._emit(f"  [ERROR] Excepción ejecutando rollback: {e}")
+            return False
 
     # ──────────────────────────────────────────────────────────────────────────
     #  OBJETIVO 1: ACTIVAR NEEDLE SWEEP (TEST DE AGUJAS AL ARRANCAR)
@@ -52,7 +64,11 @@ class AudiA6Actions:
                 tp_ok = True
                 self.kwp.start_diagnostic_session(0x86)
                 time.sleep(0.05)
-                current_coding = self.kwp.read_coding()
+                read_src = getattr(self.kwp, "last_read_source", "Desconocido")
+                self._emit(f"Canal de lectura utilizado: {read_src}")
+                if read_src != "0x1A 0x9E":
+                    return False, f"ABORTADO POR SEGURIDAD: La codificación se obtuvo mediante '{read_src}', no vía 0x1A 0x9E nativo. No se escribirá para evitar corrupciones."
+
                 if current_coding and len(current_coding) >= 2:
                     coding_list = list(current_coding)
                     self._emit(f"Codificación actual TP 2.0 ({len(coding_list)} bytes): " + " ".join(f"{b:02X}" for b in coding_list))
@@ -86,18 +102,22 @@ class AudiA6Actions:
                     if self.kwp.write_coding(bytes(coding_list)):
                         time.sleep(0.1)
                         verified_coding = self.kwp.read_coding()
+                        
+                        escrito_str = " ".join(f"{b:02X}" for b in coding_list)
+                        releido_str = " ".join(f"{b:02X}" for b in verified_coding) if verified_coding else "NINGUNO"
+                        self._emit(f"  ▸ Verificación: Escrito=[{escrito_str}] | Releído=[{releido_str}]")
+
                         if verified_coding and list(verified_coding) == coding_list:
                             msg = "¡ÉXITO! Needle Sweep activado y verificado al 100% (byte a byte) vía TP 2.0."
                             self._emit(f"✓ {msg}")
                             return True, msg
                         else:
                             self._emit("  ⚠ ALERTA: La verificación no confirmó la codificación completa. Ejecutando ROLLBACK automático...")
-                            try:
-                                self.kwp.write_coding(current_coding)
-                                self._emit("  ✓ ROLLBACK completado: Cuadro 17 restaurado a su codificación original de fábrica.")
-                            except Exception as rb_err:
-                                self._emit(f"  ✗ ERROR CRÍTICO: Falló el rollback en Cuadro 17 ({rb_err}).")
-                            return False, "La codificación se grabó pero la verificación falló. Se ejecutó rollback de seguridad."
+                            if self._rollback(current_coding):
+                                self._emit("  ✓ ROLLBACK verificado: Cuadro 17 restaurado y confirmado con su codificación original.")
+                            else:
+                                self._emit("  ✗ CRÍTICO: El ROLLBACK automático FALLÓ o la centralita no confirmó la relectura. Restaura manualmente desde el archivo de backup.")
+                            return False, "La codificación se grabó pero la verificación falló. Se gestionó rollback de seguridad."
                     return False, "La centralita del Cuadro (17) rechazó el comando de escritura KWP2000 (0x3B 0x9E)."
                 else:
                     return False, "El Cuadro de Instrumentos (17) no devolvió una codificación válida vía TP 2.0."
@@ -236,9 +256,14 @@ class AudiA6Actions:
                 self.tp20.close_channel()
                 return False, f"El módulo 0x{addr:02X} no devolvió codificación."
 
+            read_src = getattr(self.kwp, "last_read_source", "Desconocido")
+            if read_src != "0x1A 0x9E":
+                self.tp20.close_channel()
+                return False, f"ABORTADO: Codificación de {nombre} leída vía '{read_src}', no vía 0x1A 0x9E nativo. Escritura omitida por seguridad."
+
             coding_list = list(current_coding)
             self._emit(
-                f"  Coding actual ({len(coding_list)} bytes): "
+                f"  Coding actual ({len(coding_list)} bytes vía {read_src}): "
                 + " ".join(f"{b:02X}" for b in coding_list)
             )
 
@@ -310,18 +335,21 @@ class AudiA6Actions:
 
             # 4. Verificación completa byte a byte + Rollback automático si no coincide
             verified = self.kwp.read_coding()
+            escrito_str = " ".join(f"{b:02X}" for b in coding_list)
+            releido_str = " ".join(f"{b:02X}" for b in verified) if verified else "NINGUNO"
+            self._emit(f"  ▸ Verificación {nombre}: Escrito=[{escrito_str}] | Releído=[{releido_str}]")
+
             if verified and list(verified) == coding_list:
                 self.tp20.close_channel()
                 return True, "Codificación grabada y verificada al 100% (byte a byte)."
             else:
                 self._emit(f"  ⚠ ALERTA: La verificación no coincide con lo esperado. Ejecutando ROLLBACK automático...")
-                try:
-                    self.kwp.write_coding(current_coding)
-                    self._emit(f"  ✓ ROLLBACK completado: Codificación original restaurada.")
-                except Exception as rollback_err:
-                    self._emit(f"  ✗ ERROR CRÍTICO: Falló el rollback automático ({rollback_err}).")
+                if self._rollback(current_coding):
+                    self._emit(f"  ✓ ROLLBACK verificado: Módulo {nombre} restaurado y confirmado con su valor original.")
+                else:
+                    self._emit(f"  ✗ CRÍTICO: El ROLLBACK automático FALLÓ en {nombre}. Restaura manualmente desde el backup.")
                 self.tp20.close_channel()
-                return False, "Codificación fallida en verificación. Se ejecutó restauración de seguridad."
+                return False, "Codificación fallida en verificación. Se gestionó rollback de seguridad."
 
         except Exception as e:
             err = f"Error en módulo 0x{addr:02X}: {e}"
