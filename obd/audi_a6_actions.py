@@ -18,8 +18,9 @@ class AudiA6Actions:
     Controlador de operaciones directas para el Audi A6 C6 (2010).
     """
 
-    def __init__(self, can_mgr: CANManager, log_fn=None):
+    def __init__(self, can_mgr: CANManager, log_fn=None, vin: str = None):
         self.can = can_mgr
+        self.vin = vin
         self.tp20 = TP20Transport(can_mgr, timeout=0.8)
         self.kwp = KWP2000NativeClient(self.tp20)
         self._log = log_fn or print
@@ -67,7 +68,7 @@ class AudiA6Actions:
                         bm = BackupManager()
                         bm.guardar_backup(
                             modulo="Cuadro Instrumentos (17)",
-                            coche="WAUZZZ4F000000000",
+                            coche=self.vin or "GENERIC_VAG_VIN",
                             bytes_coding=" ".join(f"{b:02X}" for b in coding_list),
                             etiqueta="PRE_NEEDLE_SWEEP_TP20"
                         )
@@ -129,7 +130,7 @@ class AudiA6Actions:
                 bm = BackupManager()
                 bm.guardar_backup(
                     modulo="Cuadro Instrumentos (17)",
-                    coche="WAUZZZ4F000000000",
+                    coche=self.vin or "GENERIC_VAG_VIN",
                     bytes_coding=" ".join(f"{b:02X}" for b in current_coding),
                     etiqueta="PRE_NEEDLE_SWEEP_UDS"
                 )
@@ -299,7 +300,7 @@ class AudiA6Actions:
                 bm = BackupManager()
                 bm.guardar_backup(
                     modulo=nombre,
-                    coche="WAUZZZ4F000000000",
+                    coche=self.vin or "GENERIC_VAG_VIN",
                     bytes_coding=" ".join(f"{b:02X}" for b in coding_list),
                     etiqueta=etiqueta_backup
                 )

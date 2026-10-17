@@ -445,6 +445,8 @@ class MotorDiagnostico(QThread):
                 self.can_mgr.conectar(interface_preference="virtual")
                 self.hardware_tipo = "SIMULADO"
                 self.vin = "WAUZZZ4F000000000"
+                if hasattr(self, 'a6_actions'):
+                    self.a6_actions.vin = self.vin
                 self._log(f"[✓ OK] Conectado a bus virtual CAN. Bastidor fijado: {self.vin}")
                 self.status_signal.emit(f"Simulación — {self.vin}", "green")
                 self.vin_signal.emit(self.vin)
@@ -533,8 +535,10 @@ class MotorDiagnostico(QThread):
             else:
                 self._log("  ▸ Protocolo de bus: CAN 2.0B nativo (sin latencia de serie)")
                 self._log("  ▸ Enlace Gateway: VW TP 2.0 / KWP2000 activo.")
-                self.vin = "WAUZZZ4F000000000"
-                self._log(f"[✓ OK] Vehículo identificado en PC: Audi A6 C6 (2010) — {self.vin}")
+                self.vin = self.vin or "AUDI_A6_C6_CAN"
+                if hasattr(self, 'a6_actions'):
+                    self.a6_actions.vin = self.vin
+                self._log(f"[✓ OK] Vehículo conectado en PC: Audi A6 C6")
                 self._log("  ▸ Bus en reposo: Cero peticiones automáticas al arrancar. Pulsa 'Escanear' cuando desees.")
                 self.status_signal.emit(f"CANable Conectado (500k) — {self.vin}", "green")
                 self.vin_signal.emit(self.vin)
@@ -548,7 +552,9 @@ class MotorDiagnostico(QThread):
             self.hardware_tipo = "ELM327"
             self._log("[OK] Cable serie detectado.")
             self.status_signal.emit("Cable Serie Detectado", "yellow")
-            self.vin = "WAUZZZ4F000000000"
+            self.vin = self.vin or "AUDI_A6_SERIE"
+            if hasattr(self, 'a6_actions'):
+                self.a6_actions.vin = self.vin
             self.status_signal.emit(f"Conectado Serie — {self.vin}", "green")
             self.vin_signal.emit(self.vin)
             self.sesion_id = self.db.nueva_sesion(self.vin)
