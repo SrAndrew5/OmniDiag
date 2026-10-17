@@ -59,21 +59,28 @@ class AudiA6Actions:
                     if coding_list[1] & 0x01:
                         self._emit("El Needle Sweep ya está activado en la codificación actual.")
                         return True, "El Needle Sweep ya estaba activo en el cuadro."
-                    nuevo_byte_1 = coding_list[1] | 0x01
-                    coding_list[1] = nuevo_byte_1
-                    self._emit(f"Byte 1 modificado: 0x{current_coding[1]:02X} -> 0x{nuevo_byte_1:02X} (Bit 0 activado)")
-                    self._emit("Guardando copia de seguridad de la codificación original...")
+                    # 1. Guardar copia de seguridad OBLIGATORIA de la codificación ORIGINAL antes de tocar nada
+                    self._emit("Guardando copia de seguridad obligatoria de la codificación original...")
+                    original_hex = " ".join(f"{b:02X}" for b in current_coding)
                     try:
                         from gestion.backup_manager import BackupManager
                         bm = BackupManager()
-                        bm.guardar_backup(
+                        ruta_backup = bm.guardar_backup(
                             modulo="Cuadro Instrumentos (17)",
                             coche=self.vin or "GENERIC_VAG_VIN",
-                            bytes_coding=" ".join(f"{b:02X}" for b in coding_list),
+                            bytes_coding=original_hex,
                             etiqueta="PRE_NEEDLE_SWEEP_TP20"
                         )
-                    except Exception:
-                        pass
+                        self._emit(f"✓ Backup original guardado exitosamente.")
+                    except Exception as e:
+                        err_backup = f"ABORTADO POR SEGURIDAD: Falló la creación del backup obligatorio ({e}). No se modificará la centralita."
+                        self._emit(f"✗ {err_backup}")
+                        return False, err_backup
+
+                    # 2. Modificar Byte 1 Bit 0
+                    nuevo_byte_1 = coding_list[1] | 0x01
+                    coding_list[1] = nuevo_byte_1
+                    self._emit(f"Byte 1 modificado: 0x{current_coding[1]:02X} -> 0x{nuevo_byte_1:02X} (Bit 0 activado)")
 
                     self._emit("Escribiendo nueva codificación vía TP 2.0 (sin SecurityAccess restrictivo)...")
                     if self.kwp.write_coding(bytes(coding_list)):
@@ -83,78 +90,11 @@ class AudiA6Actions:
                             msg = "¡ÉXITO! Needle Sweep activado correctamente vía TP 2.0."
                             self._emit(f"✓ {msg}")
                             return True, msg
-
-            # Si TP 2.0 no conectó o no pudo codificar, probar vía UDS directo (CAN ID 0x714 / 0x77E)
-            # Empleado por el Cuadro de Instrumentos J285 en Audi A6 C6 Facelift (2009-2011)
-            self._emit("[MÉTODO UDS] Conectando a Cuadro 17 por canal UDS nativo (0x714 / 0x77E)...")
-            from obd.isotp_uds import ISOTPClient, UDSClient
-            isotp = ISOTPClient(self.can, tx_id=0x714, rx_id=0x77E, timeout=1.0)
-            uds = UDSClient(isotp)
-
-            # Sesión extendida
-            try:
-                uds.diagnostic_session_control(0x03)
-            except Exception:
-                pass
-            time.sleep(0.05)
-
-            current_coding = None
-            target_did = 0x0600
-            for did in (0x0600, 0x0601, 0xF18C, 0xF1A0):
-                try:
-                    c = uds.read_data_by_identifier(did)
-                    if c and len(c) >= 2:
-                        current_coding = c
-                        target_did = did
-                        break
-                except Exception:
-                    continue
-
-            if not current_coding or len(current_coding) < 2:
-                return False, "No se pudo comunicar con el Cuadro 17 ni por TP 2.0 ni por UDS (0x714). Verifica que el contacto esté encendido y la batería tenga >12.5V."
-
-            coding_list = list(current_coding)
-            self._emit(f"Codificación actual UDS ({len(coding_list)} bytes): " + " ".join(f"{b:02X}" for b in coding_list))
-
-            if coding_list[1] & 0x01:
-                self._emit("El Needle Sweep ya está activado en la codificación actual.")
-                return True, "El Needle Sweep ya estaba activo en el cuadro."
-
-            nuevo_byte_1 = coding_list[1] | 0x01
-            coding_list[1] = nuevo_byte_1
-            self._emit(f"Byte 1 modificado: 0x{current_coding[1]:02X} -> 0x{nuevo_byte_1:02X} (Bit 0 activado)")
-
-            self._emit("Guardando copia de seguridad de la codificación original...")
-            try:
-                from gestion.backup_manager import BackupManager
-                bm = BackupManager()
-                bm.guardar_backup(
-                    modulo="Cuadro Instrumentos (17)",
-                    coche=self.vin or "GENERIC_VAG_VIN",
-                    bytes_coding=" ".join(f"{b:02X}" for b in current_coding),
-                    etiqueta="PRE_NEEDLE_SWEEP_UDS"
-                )
-            except Exception:
-                pass
-
-            self._emit(f"Grabando codificación en DID 0x{target_did:04X}...")
-            if not uds.write_data_by_identifier(target_did, bytes(coding_list)):
-                return False, "El cuadro rechazó la escritura de la codificación vía UDS."
-
-            time.sleep(0.1)
-            try:
-                uds.execute_service(0x11, subfunction=0x03)  # Soft Reset
-            except Exception:
-                pass
-            time.sleep(0.3)
-
-            verif = uds.read_data_by_identifier(target_did)
-            if verif and len(verif) > 1 and (verif[1] & 0x01):
-                msg = "¡ÉXITO! Needle Sweep activado correctamente en Cuadro 17 (0x714). Al poner el próximo contacto verás el barrido de agujas."
-                self._emit(f"✓ {msg}")
-                return True, msg
+                    return False, "La centralita del Cuadro (17) rechazó la escritura o no confirmó el bit activo."
+                else:
+                    return False, "El Cuadro de Instrumentos (17) no devolvió una codificación válida vía TP 2.0."
             else:
-                return False, "La codificación se grabó pero la verificación falló."
+                return False, "No se pudo abrir canal TP 2.0 con el Cuadro 17 (J285). Verifica contacto encendido y batería >12.5V."
 
         except Exception as e:
             err = f"Error durante la codificación del Needle Sweep: {e}"
@@ -294,18 +234,23 @@ class AudiA6Actions:
                 + " ".join(f"{b:02X}" for b in coding_list)
             )
 
-            # Guardar backup obligatorio
+            # Guardar backup OBLIGATORIO de la codificación original antes de alterar bits
+            original_hex = " ".join(f"{b:02X}" for b in coding_list)
             try:
                 from gestion.backup_manager import BackupManager
                 bm = BackupManager()
                 bm.guardar_backup(
                     modulo=nombre,
                     coche=self.vin or "GENERIC_VAG_VIN",
-                    bytes_coding=" ".join(f"{b:02X}" for b in coding_list),
+                    bytes_coding=original_hex,
                     etiqueta=etiqueta_backup
                 )
-            except Exception:
-                pass
+                self._emit(f"  ✓ Copia de seguridad obligatoria guardada para {nombre}.")
+            except Exception as e:
+                self.tp20.close_channel()
+                err_bk = f"ABORTADO POR SEGURIDAD: Falló el backup obligatorio de {nombre} ({e}). Escritura cancelada."
+                self._emit(f"  ✗ {err_bk}")
+                return False, err_bk
 
             # Aplicar cambios de bits
             modificado = False

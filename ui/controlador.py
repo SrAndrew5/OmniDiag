@@ -1468,11 +1468,16 @@ class MotorDiagnostico(QThread):
         self._log(f"  ▸ Valor nuevo   : {' '.join(nuevo[i:i+2] for i in range(0, len(nuevo), 2))}")
 
         # Guardar backup obligatorio antes de escribir
-        bm = BackupManager()
-        bm.guardar_backup(
-            modulo=modulo, coche=self.vin or "W0L0SDL0874012345",
-            bytes_coding=coding_ant, etiqueta="PRE_ESCRITURA"
-        )
+        try:
+            bm = BackupManager()
+            bm.guardar_backup(
+                modulo=modulo, coche=self.vin or "GENERIC_VEHICLE_VIN",
+                bytes_coding=coding_ant, etiqueta="PRE_ESCRITURA"
+            )
+            self._log(f"  ✓ Copia de seguridad obligatoria registrada para {modulo}.")
+        except Exception as e:
+            self._log(f"[ERROR CRÍTICO] ABORTANDO: Falló la creación del backup obligatorio ({e}). No se modificará la centralita.")
+            return
 
         if self.es_modo_opel:
             cfg = OPEL_MODULES_CONFIG.get(modulo)
@@ -1532,12 +1537,6 @@ class MotorDiagnostico(QThread):
                         self.kwp.start_diagnostic_session(0x86)
                         time.sleep(0.05)
 
-                        # Si es el cuadro de instrumentos, enviar código de login previo
-                        if addr == 0x17:
-                            self._log("  ▸ Acceso de seguridad: Login 13861 en Cuadro 17...")
-                            self.kwp.security_access(13861)
-                            time.sleep(0.05)
-
                         if self.kwp.write_coding(bytes_a_escribir):
                             self._log(f"[✓ ÉXITO] ¡Codificación grabada exitosamente en {modulo} vía TP 2.0!")
                             escrito_ok = True
@@ -1548,32 +1547,6 @@ class MotorDiagnostico(QThread):
                 except Exception as e:
                     self._log(f"[ERROR] Fallo escribiendo codificación vía TP 2.0: {e}")
                     self.tp20.close_channel()
-
-            # Respaldo UDS para Cuadro 17 (0x714 / 0x77E)
-            if not escrito_ok and (modulo == "Cuadro Instrumentos (17)" or addr == 0x17):
-                try:
-                    self._log("  ▸ Intentando grabación por canal UDS nativo (0x714 / 0x77E)...")
-                    from obd.isotp_uds import ISOTPClient, UDSClient
-                    isotp = ISOTPClient(self.can_mgr, tx_id=0x714, rx_id=0x77E, timeout=1.0)
-                    uds = UDSClient(isotp)
-                    uds.diagnostic_session_control(0x03)
-                    time.sleep(0.05)
-                    try:
-                        uds.security_access(13861)
-                    except Exception:
-                        pass
-                    time.sleep(0.05)
-                    for did in (0x0600, 0x0601):
-                        if uds.write_data_by_identifier(did, bytes_a_escribir):
-                            self._log(f"[✓ ÉXITO] ¡Codificación grabada exitosamente en Cuadro 17 vía UDS (DID 0x{did:04X})!")
-                            escrito_ok = True
-                            try:
-                                uds.execute_service(0x11, subfunction=0x03)
-                            except Exception:
-                                pass
-                            break
-                except Exception as e:
-                    self._log(f"[ERROR] Fallo escribiendo por UDS: {e}")
 
             if not escrito_ok:
                 self._log(f"[ERROR] La centralita {modulo} no aceptó la nueva codificación.")
