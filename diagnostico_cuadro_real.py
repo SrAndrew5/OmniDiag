@@ -35,25 +35,20 @@ def print_header():
 def ejecutar_diagnostico():
     print_header()
 
-    can_mgr = CANManager()
+    can_mgr = CANManager(log_fn=print)
     print("\n[1/4] Buscando y conectando adaptador CANable 2.0...")
 
-    # Autodetectar puerto COM
-    puerto = can_mgr.auto_detectar_puerto()
-    if not puerto:
-        print("\n[!] No se detectó CANable 2.0 conectado por USB.")
-        print("    Verifica que el cable esté enchufado al portátil y al coche.")
+    # CANManager.conectar() prueba gs_usb (candleLight) y luego slcan por su cuenta
+    if not can_mgr.conectar(interface_preference="auto", bitrate=500000):
+        print("\n[!] No se pudo abrir el CANable 2.0 (ni por gs_usb ni por slcan).")
+        print("    Revisa: cable USB enchufado al portátil, driver instalado (WinUSB/Zadig")
+        print("    para gs_usb), y que ninguna otra app (OmniDiag, etc.) tenga el adaptador abierto.")
         res = input("\n¿Quieres ejecutar en modo SIMULADO para probar la herramienta? (s/n): ").strip().lower()
-        if res == "s":
-            puerto = "SIMULADO"
-        else:
+        if res != "s" or not can_mgr.conectar(interface_preference="virtual"):
             return
 
-    if not can_mgr.conectar(port=puerto, bitrate=500000):
-        print(f"\n[ERROR] No se pudo abrir conexión en {puerto} a 500 kbps.")
-        return
-
-    print(f"[OK] Conexión establecida con éxito en {puerto} (500 kbps).")
+    interfaz = getattr(can_mgr, "connected_interface", "desconocida")
+    print(f"[OK] Conexión establecida con éxito vía {interfaz} (500 kbps).")
     print("[*] Asegúrate de que el contacto del coche esté encendido (IGN ON, motor apagado).")
 
     tp20 = TP20Transport(can_mgr, timeout=1.5)
