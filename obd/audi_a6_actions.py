@@ -30,6 +30,8 @@ class AudiA6Actions:
             self._log(msg)
         except Exception:
             print(msg)
+        diag_logger.log_info(f"[A6 ACTION] {msg}")
+
     def _rollback(self, original: bytes) -> bool:
         """
         Restaura la codificación original y re-lee obligatoriamente para verificar
@@ -64,63 +66,65 @@ class AudiA6Actions:
                 tp_ok = True
                 self.kwp.start_diagnostic_session(0x86)
                 time.sleep(0.05)
+                current_coding = self.kwp.read_coding()
+                if not current_coding or len(current_coding) < 2:
+                    return False, "El Cuadro de Instrumentos (17) no devolvió una codificación válida vía TP 2.0."
+
                 read_src = getattr(self.kwp, "last_read_source", "Desconocido")
                 self._emit(f"Canal de lectura utilizado: {read_src}")
                 if read_src != "0x1A 0x9E":
                     return False, f"ABORTADO POR SEGURIDAD: La codificación se obtuvo mediante '{read_src}', no vía 0x1A 0x9E nativo. No se escribirá para evitar corrupciones."
 
-                if current_coding and len(current_coding) >= 2:
-                    coding_list = list(current_coding)
-                    self._emit(f"Codificación actual TP 2.0 ({len(coding_list)} bytes): " + " ".join(f"{b:02X}" for b in coding_list))
-                    if coding_list[1] & 0x01:
-                        self._emit("El Needle Sweep ya está activado en la codificación actual.")
-                        return True, "El Needle Sweep ya estaba activo en el cuadro."
-                    # 1. Guardar copia de seguridad OBLIGATORIA de la codificación ORIGINAL antes de tocar nada
-                    self._emit("Guardando copia de seguridad obligatoria de la codificación original...")
-                    original_hex = " ".join(f"{b:02X}" for b in current_coding)
-                    try:
-                        from gestion.backup_manager import BackupManager
-                        bm = BackupManager()
-                        ruta_backup = bm.guardar_backup(
-                            modulo="Cuadro Instrumentos (17)",
-                            coche=self.vin or "GENERIC_VAG_VIN",
-                            bytes_coding=original_hex,
-                            etiqueta="PRE_NEEDLE_SWEEP_TP20"
-                        )
-                        self._emit(f"✓ Backup original guardado exitosamente.")
-                    except Exception as e:
-                        err_backup = f"ABORTADO POR SEGURIDAD: Falló la creación del backup obligatorio ({e}). No se modificará la centralita."
-                        self._emit(f"✗ {err_backup}")
-                        return False, err_backup
+                coding_list = list(current_coding)
+                self._emit(f"Codificación actual TP 2.0 ({len(coding_list)} bytes): " + " ".join(f"{b:02X}" for b in coding_list))
+                if coding_list[1] & 0x01:
+                    self._emit("El Needle Sweep ya está activado en la codificación actual.")
+                    return True, "El Needle Sweep ya estaba activo en el cuadro."
 
-                    # 2. Modificar Byte 1 Bit 0
-                    nuevo_byte_1 = coding_list[1] | 0x01
-                    coding_list[1] = nuevo_byte_1
-                    self._emit(f"Byte 1 modificado: 0x{current_coding[1]:02X} -> 0x{nuevo_byte_1:02X} (Bit 0 activado)")
+                # 1. Guardar copia de seguridad OBLIGATORIA de la codificación ORIGINAL antes de tocar nada
+                self._emit("Guardando copia de seguridad obligatoria de la codificación original...")
+                original_hex = " ".join(f"{b:02X}" for b in current_coding)
+                try:
+                    from gestion.backup_manager import BackupManager
+                    bm = BackupManager()
+                    ruta_backup = bm.guardar_backup(
+                        modulo="Cuadro Instrumentos (17)",
+                        coche=self.vin or "GENERIC_VAG_VIN",
+                        bytes_coding=original_hex,
+                        etiqueta="PRE_NEEDLE_SWEEP_TP20"
+                    )
+                    self._emit(f"✓ Backup original guardado exitosamente.")
+                except Exception as e:
+                    err_backup = f"ABORTADO POR SEGURIDAD: Falló la creación del backup obligatorio ({e}). No se modificará la centralita."
+                    self._emit(f"✗ {err_backup}")
+                    return False, err_backup
 
-                    self._emit("Escribiendo nueva codificación vía TP 2.0 (sin SecurityAccess restrictivo)...")
-                    if self.kwp.write_coding(bytes(coding_list)):
-                        time.sleep(0.1)
-                        verified_coding = self.kwp.read_coding()
-                        
-                        escrito_str = " ".join(f"{b:02X}" for b in coding_list)
-                        releido_str = " ".join(f"{b:02X}" for b in verified_coding) if verified_coding else "NINGUNO"
-                        self._emit(f"  ▸ Verificación: Escrito=[{escrito_str}] | Releído=[{releido_str}]")
+                # 2. Modificar Byte 1 Bit 0
+                nuevo_byte_1 = coding_list[1] | 0x01
+                coding_list[1] = nuevo_byte_1
+                self._emit(f"Byte 1 modificado: 0x{current_coding[1]:02X} -> 0x{nuevo_byte_1:02X} (Bit 0 activado)")
 
-                        if verified_coding and list(verified_coding) == coding_list:
-                            msg = "¡ÉXITO! Needle Sweep activado y verificado al 100% (byte a byte) vía TP 2.0."
-                            self._emit(f"✓ {msg}")
-                            return True, msg
+                self._emit("Escribiendo nueva codificación vía TP 2.0 (sin SecurityAccess restrictivo)...")
+                if self.kwp.write_coding(bytes(coding_list)):
+                    time.sleep(0.1)
+                    verified_coding = self.kwp.read_coding()
+                    
+                    escrito_str = " ".join(f"{b:02X}" for b in coding_list)
+                    releido_str = " ".join(f"{b:02X}" for b in verified_coding) if verified_coding else "NINGUNO"
+                    self._emit(f"  ▸ Verificación: Escrito=[{escrito_str}] | Releído=[{releido_str}]")
+
+                    if verified_coding and list(verified_coding) == coding_list:
+                        msg = "¡ÉXITO! Needle Sweep activado y verificado al 100% (byte a byte) vía TP 2.0."
+                        self._emit(f"✓ {msg}")
+                        return True, msg
+                    else:
+                        self._emit("  ⚠ ALERTA: La verificación no confirmó la codificación completa. Ejecutando ROLLBACK automático...")
+                        if self._rollback(current_coding):
+                            self._emit("  ✓ ROLLBACK verificado: Cuadro 17 restaurado y confirmado con su codificación original.")
                         else:
-                            self._emit("  ⚠ ALERTA: La verificación no confirmó la codificación completa. Ejecutando ROLLBACK automático...")
-                            if self._rollback(current_coding):
-                                self._emit("  ✓ ROLLBACK verificado: Cuadro 17 restaurado y confirmado con su codificación original.")
-                            else:
-                                self._emit("  ✗ CRÍTICO: El ROLLBACK automático FALLÓ o la centralita no confirmó la relectura. Restaura manualmente desde el archivo de backup.")
-                            return False, "La codificación se grabó pero la verificación falló. Se gestionó rollback de seguridad."
-                    return False, "La centralita del Cuadro (17) rechazó el comando de escritura KWP2000 (0x3B 0x9E)."
-                else:
-                    return False, "El Cuadro de Instrumentos (17) no devolvió una codificación válida vía TP 2.0."
+                            self._emit("  ✗ CRÍTICO: El ROLLBACK automático FALLÓ o la centralita no confirmó la relectura. Restaura manualmente desde el archivo de backup.")
+                        return False, "La codificación se grabó pero la verificación falló. Se gestionó rollback de seguridad."
+                return False, "La centralita del Cuadro (17) rechazó el comando de escritura KWP2000 (0x3B 0x9E)."
             else:
                 return False, "No se pudo abrir canal TP 2.0 con el Cuadro 17 (J285). Verifica contacto encendido y batería >12.5V."
 
