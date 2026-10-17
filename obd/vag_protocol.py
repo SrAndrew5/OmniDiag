@@ -570,10 +570,36 @@ class VAGProtocol:
             return True
 
         resp_clean = seed_resp.replace(" ", "").upper()
-        # Si la ECU responde con Negative Response (ej. 7F 27 12 subfunción no soportada en esta sesión)
+        # Si la ECU responde con Negative Response (7F 27 <NRC>)
         if "7F27" in resp_clean:
-            self._emit("[INFO] Módulo no requiere Security Access previo en esta sesión.")
-            return True
+            idx = resp_clean.find("7F27")
+            nrc = resp_clean[idx + 4 : idx + 6] if len(resp_clean) >= idx + 6 else ""
+
+            # NRCs que indican que el servicio o subfunción no son requeridos en esta sesión:
+            # 12 = subFunctionNotSupported
+            # 7E = subFunctionNotSupportedInActiveSession
+            # 11 = serviceNotSupported
+            # 7F = serviceNotSupportedInActiveSession
+            if nrc in ("12", "7E", "11", "7F"):
+                self._emit(f"[INFO] Módulo no requiere Security Access en esta sesión (NRC 0x{nrc}).")
+                return True
+
+            # NRCs de denegación o bloqueo real:
+            # 33 = securityAccessDenied
+            # 35 = invalidKey
+            # 36 = exceedNumberOfAttempts
+            # 37 = requiredTimeDelayNotExpired
+            # 22 = conditionsNotCorrect
+            nrc_desc = {
+                "33": "Acceso denegado (securityAccessDenied - 0x33)",
+                "35": "Clave incorrecta (invalidKey - 0x35)",
+                "36": "Bloqueado por exceso de intentos (exceedNumberOfAttempts - 0x36)",
+                "37": "Retardo de seguridad temporal activo tras intentos fallidos (0x37)",
+                "22": "Condiciones incorrectas para Security Access (conditionsNotCorrect - 0x22)",
+            }.get(nrc, f"Error NRC 0x{nrc}")
+
+            self._emit(f"[ERROR] Security Access rechazado por la centralita: {nrc_desc}.")
+            return False
 
         # Respuesta positiva a 0x27 empieza con 0x67
         idx_67 = resp_clean.find("67" + subf_seed)

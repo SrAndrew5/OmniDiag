@@ -45,6 +45,7 @@ class FakeSerial:
         self.baudrate = baudrate
         self.timeout  = timeout
         self._buffer  = b""
+        self.respuestas = dict(RESPUESTAS_FIJAS)
         print(f"[FakeSerial] Conexión simulada abierta en {port} a {baudrate} baudios.")
 
     @property
@@ -65,9 +66,9 @@ class FakeSerial:
             self._buffer = (resp + "\r\n>").encode()
             return
 
-        # 2. Respuestas fijas conocidas
-        if comando_limpio in RESPUESTAS_FIJAS:
-            self._buffer = (RESPUESTAS_FIJAS[comando_limpio] + "\r\n>").encode()
+        # 2. Respuestas fijas conocidas (usando copia propia de la instancia)
+        if comando_limpio in self.respuestas:
+            self._buffer = (self.respuestas[comando_limpio] + "\r\n>").encode()
             return
 
         # 3. Protocolos UDS dinámicos
@@ -77,7 +78,7 @@ class FakeSerial:
             if did == "0600":
                 payload = comando_limpio[6:]
                 payload_fmt = " ".join(payload[i:i+2] for i in range(0, len(payload), 2))
-                RESPUESTAS_FIJAS["220600"] = f"62 06 00 {payload_fmt}"
+                self.respuestas["220600"] = f"62 06 00 {payload_fmt}"
             self._buffer = f"6E {did[:2]} {did[2:]}\r\n>".encode()
             return
 

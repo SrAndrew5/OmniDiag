@@ -51,12 +51,14 @@ class AudiA6Actions:
         addr: int,
         nombre: str,
         nuevo_bytes: bytes,
-        etiqueta_backup: str = "PRE_CODING"
+        etiqueta_backup: str = "PRE_CODING",
+        canal_ya_abierto: bool = False,
+        current_coding: bytes = None
     ) -> Tuple[bool, str]:
         """
         Función ÚNICA y unificada de escritura segura de codificación para VAG TP 2.0 / KWP2000.
         Aplica la receta de seguridad completa:
-        1. Apertura de canal TP 2.0 e inicio de sesión de diagnóstico (0x86).
+        1. Apertura de canal TP 2.0 (o reutilización si canal_ya_abierto=True).
         2. Lectura estricta por 0x1A 0x9E (aborta si la fuente no es 0x1A 0x9E).
         3. Comprobación estricta de longitud: len(nuevo_bytes) == len(original).
         4. Backup obligatorio a disco antes de cualquier intento de escritura (aborta si falla).
@@ -65,18 +67,21 @@ class AudiA6Actions:
         7. Relectura y verificación byte a byte al 100%.
         8. Si la verificación no coincide: ROLLBACK automático obligatorio a la codificación original,
            con relectura obligatoria para confirmar que el módulo recuperó su estado previo.
-        9. Cierre seguro del canal TP 2.0 en bloque finally.
+        9. Cierre seguro del canal TP 2.0 con pausa de estabilización.
         """
-        self.can.flush_rx()
-        retries = 2 if addr in (0x08, 0x09, 0x15, 0x17, 0x42, 0x46, 0x52, 0x5F) else 1
-        if not self.tp20.open_channel(addr, retries=retries):
-            return False, f"Sin respuesta del módulo {nombre} (0x{addr:02X}). ¿Contacto encendido y batería >12.5V?"
+        if not canal_ya_abierto:
+            self.can.flush_rx()
+            retries = 2 if addr in (0x08, 0x09, 0x15, 0x17, 0x42, 0x46, 0x52, 0x5F) else 1
+            if not self.tp20.open_channel(addr, retries=retries):
+                return False, f"Sin respuesta del módulo {nombre} (0x{addr:02X}). ¿Contacto encendido y batería >12.5V?"
 
         try:
-            self.kwp.start_diagnostic_session(0x86)
-            time.sleep(0.05)
+            if not canal_ya_abierto:
+                self.kwp.start_diagnostic_session(0x86)
+                time.sleep(0.05)
 
-            current_coding = self.kwp.read_coding()
+            if current_coding is None:
+                current_coding = self.kwp.read_coding()
             if not current_coding or len(current_coding) == 0:
                 return False, f"El módulo {nombre} (0x{addr:02X}) no devolvió codificación."
 
@@ -150,7 +155,9 @@ class AudiA6Actions:
             self._emit(f"✗ {err}")
             return False, err
         finally:
-            self.tp20.close_channel()
+            if not canal_ya_abierto:
+                self.tp20.close_channel()
+                time.sleep(0.1)
 
     # ──────────────────────────────────────────────────────────────────────────
     #  OBJETIVO 1: ACTIVAR NEEDLE SWEEP (TEST DE AGUJAS AL ARRANCAR)
@@ -347,24 +354,27 @@ class AudiA6Actions:
                     )
 
             if not modificado:
-                self.tp20.close_channel()
                 return True, "Sin cambios necesarios (bits ya en el estado deseado)."
 
             nuevo_bytes = bytes(coding_list)
+
+            # 3. Delegar la escritura a la función unificada manteniendo el canal ya abierto (evita doble apertura)
+            return self.escribir_coding_seguro(
+                addr=addr,
+                nombre=nombre,
+                nuevo_bytes=nuevo_bytes,
+                etiqueta_backup=etiqueta_backup,
+                canal_ya_abierto=True,
+                current_coding=current_coding
+            )
         except Exception as e:
             err = f"Error en módulo 0x{addr:02X}: {e}"
             self._emit(f"  ✗ {err}")
             return False, err
         finally:
             self.tp20.close_channel()
-
-        # 3. Delegar la escritura a la función unificada escribir_coding_seguro
-        return self.escribir_coding_seguro(
-            addr=addr,
-            nombre=nombre,
-            nuevo_bytes=nuevo_bytes,
-            etiqueta_backup=etiqueta_backup
-        )
+            # Pausa de seguridad para permitir que el Gateway J533 estabilice el canal
+            time.sleep(0.1)
 
     # ──────────────────────────────────────────────────────────────────────────
     #  OBJETIVO 3: DIAGNÓSTICO Y BORRADO DE LUCES (MÓDULO 09 - J519)
