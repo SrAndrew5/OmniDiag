@@ -30,7 +30,7 @@ RESPUESTAS_FIJAS = {
     "190209":   "59 02 FF 00",
     "14FFFFFF": "54",
     "220600":   "62 06 00 0A 00 FF 13 44 10 00 A2",
-    "2701":     "67 01 CA FE",
+    "2701":     "67 01 00 00",
 }
 
 
@@ -74,6 +74,10 @@ class FakeSerial:
         # Servicio 0x2E: WriteDataByIdentifier (ej. 2E0600... para Long Coding)
         if comando_limpio.startswith("2E") and len(comando_limpio) >= 6:
             did = comando_limpio[2:6]
+            if did == "0600":
+                payload = comando_limpio[6:]
+                payload_fmt = " ".join(payload[i:i+2] for i in range(0, len(payload), 2))
+                RESPUESTAS_FIJAS["220600"] = f"62 06 00 {payload_fmt}"
             self._buffer = f"6E {did[:2]} {did[2:]}\r\n>".encode()
             return
 

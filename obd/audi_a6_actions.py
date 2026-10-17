@@ -46,6 +46,112 @@ class AudiA6Actions:
             self._emit(f"  [ERROR] Excepción ejecutando rollback: {e}")
             return False
 
+    def escribir_coding_seguro(
+        self,
+        addr: int,
+        nombre: str,
+        nuevo_bytes: bytes,
+        etiqueta_backup: str = "PRE_CODING"
+    ) -> Tuple[bool, str]:
+        """
+        Función ÚNICA y unificada de escritura segura de codificación para VAG TP 2.0 / KWP2000.
+        Aplica la receta de seguridad completa:
+        1. Apertura de canal TP 2.0 e inicio de sesión de diagnóstico (0x86).
+        2. Lectura estricta por 0x1A 0x9E (aborta si la fuente no es 0x1A 0x9E).
+        3. Comprobación estricta de longitud: len(nuevo_bytes) == len(original).
+        4. Backup obligatorio a disco antes de cualquier intento de escritura (aborta si falla).
+        5. Comprobación de idempotencia: si nuevo_bytes == original, no escribe y retorna éxito.
+        6. Escritura mediante Service 0x3B 0x9E (write_coding).
+        7. Relectura y verificación byte a byte al 100%.
+        8. Si la verificación no coincide: ROLLBACK automático obligatorio a la codificación original,
+           con relectura obligatoria para confirmar que el módulo recuperó su estado previo.
+        9. Cierre seguro del canal TP 2.0 en bloque finally.
+        """
+        self.can.flush_rx()
+        retries = 2 if addr in (0x08, 0x09, 0x15, 0x17, 0x42, 0x46, 0x52, 0x5F) else 1
+        if not self.tp20.open_channel(addr, retries=retries):
+            return False, f"Sin respuesta del módulo {nombre} (0x{addr:02X}). ¿Contacto encendido y batería >12.5V?"
+
+        try:
+            self.kwp.start_diagnostic_session(0x86)
+            time.sleep(0.05)
+
+            current_coding = self.kwp.read_coding()
+            if not current_coding or len(current_coding) == 0:
+                return False, f"El módulo {nombre} (0x{addr:02X}) no devolvió codificación."
+
+            read_src = getattr(self.kwp, "last_read_source", "Desconocido")
+            self._emit(f"Canal de lectura en {nombre}: {read_src}")
+            if read_src != "0x1A 0x9E":
+                return False, f"ABORTADO POR SEGURIDAD: La codificación de {nombre} se obtuvo mediante '{read_src}', no vía 0x1A 0x9E nativo. Escritura rechazada para evitar corrupciones."
+
+            # Comprobación de longitud exacta
+            if len(nuevo_bytes) != len(current_coding):
+                err_len = (
+                    f"ABORTADO POR SEGURIDAD: Longitud incompatible para {nombre}. "
+                    f"Nueva: {len(nuevo_bytes)} bytes | Original: {len(current_coding)} bytes. "
+                    f"No se permite escribir codificaciones con longitudes distintas."
+                )
+                self._emit(f"✗ {err_len}")
+                return False, err_len
+
+            # Backup obligatorio previo a la escritura
+            self._emit(f"Guardando copia de seguridad obligatoria para {nombre}...")
+            original_hex = " ".join(f"{b:02X}" for b in current_coding)
+            try:
+                from gestion.backup_manager import BackupManager
+                bm = BackupManager()
+                bm.guardar_backup(
+                    modulo=nombre,
+                    coche=self.vin or "GENERIC_VAG_VIN",
+                    bytes_coding=original_hex,
+                    etiqueta=etiqueta_backup
+                )
+                self._emit(f"✓ Backup original guardado exitosamente para {nombre}.")
+            except Exception as e:
+                err_backup = f"ABORTADO POR SEGURIDAD: Falló la creación del backup obligatorio de {nombre} ({e}). Escritura cancelada."
+                self._emit(f"✗ {err_backup}")
+                return False, err_backup
+
+            # Idempotencia: si ya coincide, no escribir
+            if bytes(nuevo_bytes) == bytes(current_coding):
+                self._emit(f"La codificación en {nombre} ya coincide exactamente con el valor solicitado. Sin cambios.")
+                return True, f"Sin cambios: la codificación en {nombre} ya coincide con el valor deseado."
+
+            # Escritura
+            nuevo_hex = " ".join(f"{b:02X}" for b in nuevo_bytes)
+            self._emit(f"Escribiendo nueva codificación en {nombre} ({len(nuevo_bytes)} bytes): {nuevo_hex}")
+            if not self.kwp.write_coding(bytes(nuevo_bytes)):
+                return False, f"La centralita de {nombre} (0x{addr:02X}) rechazó el comando de escritura KWP2000 (0x3B 0x9E)."
+
+            time.sleep(0.1)
+
+            # Relectura y verificación byte a byte
+            verified_coding = self.kwp.read_coding()
+            escrito_str = " ".join(f"{b:02X}" for b in nuevo_bytes)
+            releido_str = " ".join(f"{b:02X}" for b in verified_coding) if verified_coding else "NINGUNO"
+            self._emit(f"  ▸ Verificación {nombre}: Escrito=[{escrito_str}] | Releído=[{releido_str}]")
+
+            if verified_coding and bytes(verified_coding) == bytes(nuevo_bytes):
+                msg = f"¡ÉXITO! Codificación grabada y verificada al 100% (byte a byte) en {nombre} vía TP 2.0."
+                self._emit(f"✓ {msg}")
+                return True, msg
+            else:
+                self._emit(f"  ⚠ ALERTA: La verificación no confirmó la codificación completa en {nombre}. Ejecutando ROLLBACK automático...")
+                if self._rollback(current_coding):
+                    self._emit(f"  ✓ ROLLBACK verificado: {nombre} restaurado y confirmado con su codificación original.")
+                    return False, f"La codificación en {nombre} falló en la verificación (releído != escrito). Se ejecutó rollback con éxito y la centralita volvió a su estado original."
+                else:
+                    self._emit(f"  ✗ CRÍTICO: El ROLLBACK automático FALLÓ o no se confirmó en {nombre}. Restaura manualmente desde el archivo de backup.")
+                    return False, f"CRÍTICO: Verificación fallida y el ROLLBACK automático no pudo confirmar la restauración en {nombre}. Restaura manualmente desde el backup."
+
+        except Exception as e:
+            err = f"Error durante la codificación de {nombre} (0x{addr:02X}): {e}"
+            self._emit(f"✗ {err}")
+            return False, err
+        finally:
+            self.tp20.close_channel()
+
     # ──────────────────────────────────────────────────────────────────────────
     #  OBJETIVO 1: ACTIVAR NEEDLE SWEEP (TEST DE AGUJAS AL ARRANCAR)
     #  Módulo 17 (Cuadro de Instrumentos J285) -> Byte 1, Bit 0 = 1
@@ -59,81 +165,17 @@ class AudiA6Actions:
         self._emit("  ACTIVANDO NEEDLE SWEEP (MÓDULO 17 - CUADRO)")
         self._emit("=" * 55)
 
-        try:
-            self.can.flush_rx()
-            tp_ok = False
-            if self.tp20.open_channel(0x17, retries=2):
-                tp_ok = True
-                self.kwp.start_diagnostic_session(0x86)
-                time.sleep(0.05)
-                current_coding = self.kwp.read_coding()
-                if not current_coding or len(current_coding) < 2:
-                    return False, "El Cuadro de Instrumentos (17) no devolvió una codificación válida vía TP 2.0."
-
-                read_src = getattr(self.kwp, "last_read_source", "Desconocido")
-                self._emit(f"Canal de lectura utilizado: {read_src}")
-                if read_src != "0x1A 0x9E":
-                    return False, f"ABORTADO POR SEGURIDAD: La codificación se obtuvo mediante '{read_src}', no vía 0x1A 0x9E nativo. No se escribirá para evitar corrupciones."
-
-                coding_list = list(current_coding)
-                self._emit(f"Codificación actual TP 2.0 ({len(coding_list)} bytes): " + " ".join(f"{b:02X}" for b in coding_list))
-                if coding_list[1] & 0x01:
-                    self._emit("El Needle Sweep ya está activado en la codificación actual.")
-                    return True, "El Needle Sweep ya estaba activo en el cuadro."
-
-                # 1. Guardar copia de seguridad OBLIGATORIA de la codificación ORIGINAL antes de tocar nada
-                self._emit("Guardando copia de seguridad obligatoria de la codificación original...")
-                original_hex = " ".join(f"{b:02X}" for b in current_coding)
-                try:
-                    from gestion.backup_manager import BackupManager
-                    bm = BackupManager()
-                    ruta_backup = bm.guardar_backup(
-                        modulo="Cuadro Instrumentos (17)",
-                        coche=self.vin or "GENERIC_VAG_VIN",
-                        bytes_coding=original_hex,
-                        etiqueta="PRE_NEEDLE_SWEEP_TP20"
-                    )
-                    self._emit(f"✓ Backup original guardado exitosamente.")
-                except Exception as e:
-                    err_backup = f"ABORTADO POR SEGURIDAD: Falló la creación del backup obligatorio ({e}). No se modificará la centralita."
-                    self._emit(f"✗ {err_backup}")
-                    return False, err_backup
-
-                # 2. Modificar Byte 1 Bit 0
-                nuevo_byte_1 = coding_list[1] | 0x01
-                coding_list[1] = nuevo_byte_1
-                self._emit(f"Byte 1 modificado: 0x{current_coding[1]:02X} -> 0x{nuevo_byte_1:02X} (Bit 0 activado)")
-
-                self._emit("Escribiendo nueva codificación vía TP 2.0 (sin SecurityAccess restrictivo)...")
-                if self.kwp.write_coding(bytes(coding_list)):
-                    time.sleep(0.1)
-                    verified_coding = self.kwp.read_coding()
-                    
-                    escrito_str = " ".join(f"{b:02X}" for b in coding_list)
-                    releido_str = " ".join(f"{b:02X}" for b in verified_coding) if verified_coding else "NINGUNO"
-                    self._emit(f"  ▸ Verificación: Escrito=[{escrito_str}] | Releído=[{releido_str}]")
-
-                    if verified_coding and list(verified_coding) == coding_list:
-                        msg = "¡ÉXITO! Needle Sweep activado y verificado al 100% (byte a byte) vía TP 2.0."
-                        self._emit(f"✓ {msg}")
-                        return True, msg
-                    else:
-                        self._emit("  ⚠ ALERTA: La verificación no confirmó la codificación completa. Ejecutando ROLLBACK automático...")
-                        if self._rollback(current_coding):
-                            self._emit("  ✓ ROLLBACK verificado: Cuadro 17 restaurado y confirmado con su codificación original.")
-                        else:
-                            self._emit("  ✗ CRÍTICO: El ROLLBACK automático FALLÓ o la centralita no confirmó la relectura. Restaura manualmente desde el archivo de backup.")
-                        return False, "La codificación se grabó pero la verificación falló. Se gestionó rollback de seguridad."
-                return False, "La centralita del Cuadro (17) rechazó el comando de escritura KWP2000 (0x3B 0x9E)."
-            else:
-                return False, "No se pudo abrir canal TP 2.0 con el Cuadro 17 (J285). Verifica contacto encendido y batería >12.5V."
-
-        except Exception as e:
-            err = f"Error durante la codificación del Needle Sweep: {e}"
-            self._emit(f"✗ {err}")
-            return False, err
-        finally:
-            self.tp20.close_channel()
+        ok, msg = self._codificar_bits_modulo(
+            addr=0x17,
+            nombre="Cuadro Instrumentos (17)",
+            bits_activar=[(1, 0, True)],
+            etiqueta_backup="PRE_NEEDLE_SWEEP_TP20"
+        )
+        if ok and "Sin cambios" in msg:
+            return True, "El Needle Sweep ya estaba activo en el cuadro."
+        elif ok:
+            return True, "¡ÉXITO! Needle Sweep activado y verificado al 100% (byte a byte) vía TP 2.0."
+        return False, msg
 
     # ──────────────────────────────────────────────────────────────────────────
     #  OBJETIVO 2: PLEGADO AUTOMÁTICO DE RETROVISORES CON EL MANDO
@@ -263,7 +305,7 @@ class AudiA6Actions:
             read_src = getattr(self.kwp, "last_read_source", "Desconocido")
             if read_src != "0x1A 0x9E":
                 self.tp20.close_channel()
-                return False, f"ABORTADO: Codificación de {nombre} leída vía '{read_src}', no vía 0x1A 0x9E nativo. Escritura omitida por seguridad."
+                return False, f"ABORTADO POR SEGURIDAD: Codificación de {nombre} leída vía '{read_src}', no vía 0x1A 0x9E nativo. Escritura omitida por seguridad."
 
             coding_list = list(current_coding)
             self._emit(
@@ -271,25 +313,7 @@ class AudiA6Actions:
                 + " ".join(f"{b:02X}" for b in coding_list)
             )
 
-            # Guardar backup OBLIGATORIO de la codificación original antes de alterar bits
-            original_hex = " ".join(f"{b:02X}" for b in coding_list)
-            try:
-                from gestion.backup_manager import BackupManager
-                bm = BackupManager()
-                bm.guardar_backup(
-                    modulo=nombre,
-                    coche=self.vin or "GENERIC_VAG_VIN",
-                    bytes_coding=original_hex,
-                    etiqueta=etiqueta_backup
-                )
-                self._emit(f"  ✓ Copia de seguridad obligatoria guardada para {nombre}.")
-            except Exception as e:
-                self.tp20.close_channel()
-                err_bk = f"ABORTADO POR SEGURIDAD: Falló el backup obligatorio de {nombre} ({e}). Escritura cancelada."
-                self._emit(f"  ✗ {err_bk}")
-                return False, err_bk
-
-            # 1. Validar que todos los bytes requeridos existan en la codificación leída
+            # 1. Validar que todos los bytes requeridos existan en la codificación leída (nunca rellenar con ceros)
             for byte_idx, bit_idx, _ in bits_activar:
                 if byte_idx >= len(coding_list):
                     self.tp20.close_channel()
@@ -326,43 +350,21 @@ class AudiA6Actions:
                 self.tp20.close_channel()
                 return True, "Sin cambios necesarios (bits ya en el estado deseado)."
 
-            self._emit(
-                f"  Nuevo coding: " + " ".join(f"{b:02X}" for b in coding_list)
-            )
-
-            # 3. Escribir nueva codificación
-            if not self.kwp.write_coding(bytes(coding_list)):
-                self.tp20.close_channel()
-                return False, f"El módulo 0x{addr:02X} rechazó la escritura."
-
-            time.sleep(0.1)
-
-            # 4. Verificación completa byte a byte + Rollback automático si no coincide
-            verified = self.kwp.read_coding()
-            escrito_str = " ".join(f"{b:02X}" for b in coding_list)
-            releido_str = " ".join(f"{b:02X}" for b in verified) if verified else "NINGUNO"
-            self._emit(f"  ▸ Verificación {nombre}: Escrito=[{escrito_str}] | Releído=[{releido_str}]")
-
-            if verified and list(verified) == coding_list:
-                self.tp20.close_channel()
-                return True, "Codificación grabada y verificada al 100% (byte a byte)."
-            else:
-                self._emit(f"  ⚠ ALERTA: La verificación no coincide con lo esperado. Ejecutando ROLLBACK automático...")
-                if self._rollback(current_coding):
-                    self._emit(f"  ✓ ROLLBACK verificado: Módulo {nombre} restaurado y confirmado con su valor original.")
-                else:
-                    self._emit(f"  ✗ CRÍTICO: El ROLLBACK automático FALLÓ en {nombre}. Restaura manualmente desde el backup.")
-                self.tp20.close_channel()
-                return False, "Codificación fallida en verificación. Se gestionó rollback de seguridad."
-
+            nuevo_bytes = bytes(coding_list)
         except Exception as e:
             err = f"Error en módulo 0x{addr:02X}: {e}"
             self._emit(f"  ✗ {err}")
-            try:
-                self.tp20.close_channel()
-            except Exception:
-                pass
             return False, err
+        finally:
+            self.tp20.close_channel()
+
+        # 3. Delegar la escritura a la función unificada escribir_coding_seguro
+        return self.escribir_coding_seguro(
+            addr=addr,
+            nombre=nombre,
+            nuevo_bytes=nuevo_bytes,
+            etiqueta_backup=etiqueta_backup
+        )
 
     # ──────────────────────────────────────────────────────────────────────────
     #  OBJETIVO 3: DIAGNÓSTICO Y BORRADO DE LUCES (MÓDULO 09 - J519)

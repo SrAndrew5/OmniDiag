@@ -1526,33 +1526,32 @@ class MotorDiagnostico(QThread):
                 return
 
         if self.hardware_tipo == "CANABLE":
-            escrito_ok = False
-            bytes_a_escribir = bytes.fromhex(nuevo)
             addr = TP20_MODULE_ADDR.get(modulo)
-            if addr is not None:
-                try:
-                    self.can_mgr.flush_rx()
-                    retries = 2 if addr in (0x08, 0x09, 0x15, 0x17, 0x46, 0x5F) else 1
-                    if self.tp20.open_channel(addr, retries=retries):
-                        self.kwp.start_diagnostic_session(0x86)
-                        time.sleep(0.05)
+            if addr is None:
+                self._log(f"[ERROR] Módulo '{modulo}' no tiene dirección TP 2.0 configurada.")
+                return
 
-                        if self.kwp.write_coding(bytes_a_escribir):
-                            self._log(f"[✓ ÉXITO] ¡Codificación grabada exitosamente en {modulo} vía TP 2.0!")
-                            escrito_ok = True
-                        else:
-                            self._log(f"[ERROR] La centralita {modulo} rechazó la codificación vía TP 2.0.")
+            try:
+                bytes_a_escribir = bytes.fromhex(nuevo)
+            except ValueError as ve:
+                self._log(f"[ERROR] Codificación hexadecimal inválida: {ve}")
+                return
 
-                        self.tp20.close_channel()
-                except Exception as e:
-                    self._log(f"[ERROR] Fallo escribiendo codificación vía TP 2.0: {e}")
-                    self.tp20.close_channel()
-
-            if not escrito_ok:
-                self._log(f"[ERROR] La centralita {modulo} no aceptó la nueva codificación.")
+            ok, msg = self.a6_actions.escribir_coding_seguro(
+                addr=addr,
+                nombre=modulo,
+                nuevo_bytes=bytes_a_escribir,
+                etiqueta_backup="PRE_ESCRITURA"
+            )
+            if ok:
+                self._log(f"\n[✓ ÉXITO] {msg}")
+                self.coding_signal.emit(nuevo)
+            else:
+                self._log(f"\n[ERROR] {msg}")
         else:
             time.sleep(0.8)
             self._log(f"[✓ ÉXITO] Codificación grabada y verificada (modo simulado).")
+            self.coding_signal.emit(nuevo)
 
     # ──────────────────────────────────────────────────────────────────────────
     #  ACCIÓN DIRECTA: NEEDLE SWEEP (BARRIDO DE AGUJAS)

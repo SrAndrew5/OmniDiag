@@ -21,6 +21,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from core.can_manager import CANManager
 from obd.tp20_can import TP20Transport, KWP2000NativeClient
+from obd.audi_a6_actions import AudiA6Actions
 from gestion.backup_manager import BackupManager
 
 
@@ -107,7 +108,7 @@ def ejecutar_diagnostico():
         if total_bytes >= 3:
             # Cuadro con LONG CODING (Estructura de bytes)
             print("\n" + "★" * 55)
-            print(" ¡CONFIRMADO! TU CUADRO TIENE ARQUITECTURA LONG CODING")
+            print(" DIAGNÓSTICO: FORMATO LONG CODING DETECTADO")
             print("★" * 55)
 
             byte_1 = coding_bytes[1]
@@ -120,57 +121,32 @@ def ejecutar_diagnostico():
             print(f"    - Bit 3 [Lap Timer / Cronómetro]: {'[ACTIVO]' if laptimer_activo else '[INACTIVO]'}")
 
             if needle_activo:
-                print("\n[✓] El Needle Sweep YA ESTÁ ACTIVADO en la memoria de este cuadro.")
-                print("    Si quitas contacto 10 segundos y vuelves a dar contacto, las agujas deben barrer.")
+                print("\n[✓] El Needle Sweep YA ESTÁ ACTIVADO en la codificación de este cuadro.")
             else:
-                print("\n[!] El Needle Sweep está SOPORTADO pero actualmente está DESACTIVADO.")
-                opcion = input("\n¿Deseas ACTIVAR el Needle Sweep ahora mismo de forma limpia? (s/n): ").strip().lower()
+                print("\n[!] El Needle Sweep está actualmente DESACTIVADO (Bit 0 Byte 1 en 0).")
+                opcion = input("\n¿Deseas activar el Needle Sweep mediante el protocolo seguro unificado? (s/n): ").strip().lower()
 
                 if opcion == "s":
-                    # Backup previo
-                    bm = BackupManager()
-                    bm.guardar_backup(
-                        modulo="Cuadro Instrumentos (17)",
-                        coche="AUDI_A6_C6_FACELIFT",
-                        bytes_coding=hex_str,
-                        etiqueta="PRE_NEEDLE_SWEEP_STANDALONE"
-                    )
-                    print("[OK] Copia de seguridad guardada en datos/backups/")
-
-                    # Modificar Byte 1, Bit 0
-                    coding_bytes[1] = byte_1 | 0x01
-                    nuevo_hex = " ".join(f"{b:02X}" for b in coding_bytes)
-                    print(f"[*] Nuevo Byte 1 calculado: 0x{coding_bytes[1]:02X}")
-                    print(f"[*] Nueva codificación: {nuevo_hex}")
-
-                    print("\n[*] Escribiendo en el cuadro mediante Service 0x3B (sin claves de seguridad falsas)...")
-                    if kwp.write_coding(bytes(coding_bytes)):
-                        time.sleep(0.15)
-                        # Verificar
-                        verif = kwp.read_coding()
-                        if verif and len(verif) > 1 and (verif[1] & 0x01):
-                            print("\n" + "=" * 60)
-                            print(" ¡ÉXITO ROTUNDO! NEEDLE SWEEP GRABADO Y VERIFICADO")
-                            print("=" * 60)
-                            print("Próximo paso:")
-                            print("1. Quita el contacto del coche y saca la llave 10 segundos.")
-                            print("2. Vuelve a meter la llave y da contacto.")
-                            print("3. ¡Disfruta del barrido de agujas completo!")
-                        else:
-                            print("\n[?] El comando se envió pero la verificación devolvió valor anterior.")
+                    tp20.close_channel()
+                    actions = AudiA6Actions(can_mgr, log_fn=print, vin="AUDI_A6_C6_FACELIFT")
+                    ok, msg = actions.activar_needle_sweep()
+                    if ok:
+                        print("\n" + "=" * 60)
+                        print(" ¡ÉXITO! NEEDLE SWEEP GRABADO Y VERIFICADO AL 100%")
+                        print("=" * 60)
                     else:
-                        print("\n[FALLO] El cuadro rechazó la escritura (NRC de servicio).")
+                        print(f"\n[AVISO] {msg}")
 
         else:
             # Cuadro con SHORT CODING (Soft Coding decimal)
             print("\n" + "─" * 55)
-            print(" DIAGNÓSTICO: TU CUADRO UTILIZA SOFT CODING TRADICIONAL")
+            print(" DIAGNÓSTICO: LONGITUD INFERIOR A 3 BYTES (SOFT CODING TRADICIONAL)")
             print("─" * 55)
             print(f"Volcado en memoria: {hex_str}")
-            print("\nConclusión técnica definitiva:")
-            print("Esta versión de software del cuadro 4F0 920 933 utiliza codificación")
-            print("corta de opciones fijas. En esta revisión de fábrica, Audi no")
-            print("incluyó la rutina de Needle Sweep por puerto de diagnosis OBD.")
+            print("\nInformación técnica:")
+            print("La codificación leída tiene menos de 3 bytes. En cuadros con codificación")
+            print("corta tradicional, el Needle Sweep habitualmente no está documentado")
+            print("por este canal de codificación.")
 
     except Exception as e:
         print(f"\n[EXCEPCIÓN] Error durante el diagnóstico: {e}")

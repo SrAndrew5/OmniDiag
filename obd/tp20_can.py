@@ -613,7 +613,8 @@ class KWP2000NativeClient:
                             diag_logger.log_info(f"[KWP] Codificación leída ({coding_len} bytes) en 0x1A 0x{subfn:02X}: {coding_bytes.hex()}")
                             self.last_read_source = f"0x1A 0x{subfn:02X}"
                             return bytes(coding_bytes)
-            except Exception:
+            except Exception as e:
+                diag_logger.log_debug(f"[KWP] Lectura 0x1A sub 0x{subfn:02X} no respondida: {e}")
                 continue
 
         # Fallback a lectura por identificador UDS / KWP si estuviese disponible
@@ -624,7 +625,8 @@ class KWP2000NativeClient:
                     data = resp[2:] if len(resp) >= 4 else resp
                     self.last_read_source = f"0x22 0x{did:04X}"
                     return bytes(data)
-            except Exception:
+            except Exception as e:
+                diag_logger.log_debug(f"[KWP] Lectura 0x22 DID 0x{did:04X} no respondida: {e}")
                 continue
 
         return None

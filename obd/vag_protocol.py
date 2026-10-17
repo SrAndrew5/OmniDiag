@@ -552,9 +552,9 @@ class VAGProtocol:
 
         return None
 
-    def security_access(self, nivel: int = 1) -> bool:
+    def security_access(self, nivel: int = 1, login_code: int = None) -> bool:
         """
-        Solicita acceso de seguridad (UDS 0x27) antes de escribir coding.
+        Solicita acceso de seguridad (UDS 0x27) antes de escribir coding si la ECU lo requiere.
         """
         subf_seed = f"{nivel:02X}"      # ej. "01"
         subf_key  = f"{nivel + 1:02X}"  # ej. "02"
@@ -565,22 +565,41 @@ class VAGProtocol:
         self.conexion.enviar_comando(f"27{subf_seed}", descripcion=f"Security Access Request Seed (27 {subf_seed})")
         time.sleep(0.2)
         seed_resp = self.conexion.leer_respuesta(timeout_s=1.0)
+        if not seed_resp:
+            self._emit("[INFO] Módulo no respondió a Security Access; continuando.")
+            return True
+
+        resp_clean = seed_resp.replace(" ", "").upper()
+        # Si la ECU responde con Negative Response (ej. 7F 27 12 subfunción no soportada en esta sesión)
+        if "7F27" in resp_clean:
+            self._emit("[INFO] Módulo no requiere Security Access previo en esta sesión.")
+            return True
 
         # Respuesta positiva a 0x27 empieza con 0x67
-        if not seed_resp or "67" not in seed_resp:
-            self._emit("[INFO] Módulo no requiere Security Access previo o ya está en sesión habilitada.")
-            return True
+        idx_67 = resp_clean.find("67" + subf_seed)
+        if idx_67 != -1:
+            seed_data = resp_clean[idx_67 + 4:]
+            seed_hex = "".join(c for c in seed_data if c in "0123456789ABCDEF")
+            # Semilla todo ceros: ECU ya desbloqueada
+            if not seed_hex or set(seed_hex) == {"0"}:
+                self._emit("[OK] Módulo ya desbloqueado (semilla 00). No requiere envío de clave.")
+                return True
 
-        llave = "00000000"
-        self.conexion.enviar_comando(f"27{subf_key}{llave}", descripcion="Security Access Send Key")
-        time.sleep(0.2)
-        key_resp = self.conexion.leer_respuesta(timeout_s=1.0)
+            if login_code is not None:
+                llave = f"{login_code:04X}"
+                self.conexion.enviar_comando(f"27{subf_key}{llave}", descripcion=f"Security Access Send Key ({llave})")
+                time.sleep(0.2)
+                key_resp = self.conexion.leer_respuesta(timeout_s=1.0)
+                if key_resp and ("67" + subf_key) in key_resp.replace(" ", "").upper():
+                    self._emit("[OK] Security Access concedido con código de acceso.")
+                    return True
+                else:
+                    self._emit(f"[ERROR] Security Access rechazado con el código proporcionado: {key_resp}")
+                    return False
 
-        if key_resp and "67" in key_resp:
-            self._emit("[OK] Security Access concedido.")
-            return True
+            self._emit(f"[WARN] El módulo requiere cálculo algorítmico de semilla ({seed_hex}) o login no suministrado.")
+            return False
 
-        self._emit("[WARN] Security Access no requerido o clave estándar no necesaria.")
         return True
 
     def escribir_coding_uds(self, nombre_modulo: str, vin: str,
@@ -589,25 +608,36 @@ class VAGProtocol:
         Escribe un nuevo Long Coding en la ECU usando el servicio UDS 0x2E.
 
         Proceso seguro obligatorio:
-        1. Backup automático preventivo del coding antiguo en disco (.json).
-        2. Inicialización de cabecera y filtro CAN del módulo.
-        3. Sesión extendida de diagnóstico (UDS 10 03).
-        4. Security Access si corresponde.
-        5. Escritura con servicio 0x2E + DID 0x0600.
-        6. Reinicio suave (Soft Reset 11 03) para activar los cambios.
-        7. Verificación de relectura posterior.
+        1. Comprobación estricta de longitudes (nuevo vs antiguo).
+        2. Backup automático preventivo del coding antiguo en disco (.json) con aborto si falla.
+        3. Inicialización de cabecera y filtro CAN del módulo.
+        4. Sesión extendida de diagnóstico (UDS 10 03).
+        5. Comprobación de Security Access real.
+        6. Escritura con servicio 0x2E + DID 0x0600.
+        7. Reinicio suave (Soft Reset 11 03) para activar los cambios.
+        8. Verificación byte a byte de relectura obligatoria.
         """
         if not coding_antiguo:
             return "[ERROR] Operación abortada: falta el coding original para hacer el backup."
 
+        coding_limpio = nuevo_coding.replace(" ", "").upper()
+        antiguo_limpio = coding_antiguo.replace(" ", "").upper()
+
+        # Comprobación de longitudes
+        if len(coding_limpio) != len(antiguo_limpio):
+            return f"[ERROR] Longitud no coincide: nuevo ({len(coding_limpio)//2} bytes) vs original ({len(antiguo_limpio)//2} bytes). Abortado por seguridad."
+
         self._emit(f"[INFO] Iniciando escritura de coding en {nombre_modulo}...")
 
         # 1. Backup obligatorio previo
-        backup_mgr = BackupManager()
-        ruta = backup_mgr.guardar_backup(
-            modulo=nombre_modulo, coche=vin, bytes_coding=coding_antiguo, etiqueta="AUTO_PREVIO_ESCRITURA"
-        )
-        self._emit(f"[SEGURIDAD] Copia de seguridad obligatoria guardada en: {ruta}")
+        try:
+            backup_mgr = BackupManager()
+            ruta = backup_mgr.guardar_backup(
+                modulo=nombre_modulo, coche=vin, bytes_coding=coding_antiguo, etiqueta="AUTO_PREVIO_ESCRITURA"
+            )
+            self._emit(f"[SEGURIDAD] Copia de seguridad obligatoria guardada en: {ruta}")
+        except Exception as e:
+            return f"[ERROR CRÍTICO] Falló el backup obligatorio ({e}). Escritura abortada por seguridad."
 
         # 2. Configurar TX y RX del módulo
         self.inicializar_modulo(nombre_modulo)
@@ -618,16 +648,21 @@ class VAGProtocol:
         self.conexion.leer_respuesta(timeout_s=1.0)
 
         # 4. Security Access
-        self.security_access()
+        if not self.security_access():
+            return "[ERROR] Security Access no superado. Escritura abortada por seguridad."
 
         # 5. Escritura (servicio 0x2E + DID 0x0600 + datos)
-        coding_limpio = nuevo_coding.replace(" ", "")
         self.conexion.enviar_comando(f"2E0600{coding_limpio}", descripcion=f"UDS Write Coding 0x0600 ({len(coding_limpio)//2} bytes)")
         time.sleep(0.5)
         respuesta = self.conexion.leer_respuesta(timeout_s=3.0)
 
-        # Respuesta positiva a 0x2E empieza con 0x6E
-        if respuesta and "6E" in respuesta:
+        resp_clean = respuesta.replace(" ", "").upper() if respuesta else ""
+        if "7F2E" in resp_clean:
+            self._emit(f"[ERROR] La centralita rechazó el comando 0x2E (Negative Response): {respuesta}")
+            diag_logger.log_transferencia(f"Escritura Coding en {nombre_modulo}", False, respuesta)
+            return f"Error: La centralita rechazó el comando 0x2E → {respuesta}"
+
+        if resp_clean.startswith("6E0600") or "6E0600" in resp_clean or (resp_clean.startswith("6E") and "7F" not in resp_clean):
             self._emit("[OK] ¡Coding aceptado y grabado con éxito en la memoria del módulo!")
             diag_logger.log_transferencia(f"Escritura Coding en {nombre_modulo}", True, nuevo_coding)
 
@@ -637,13 +672,19 @@ class VAGProtocol:
             time.sleep(0.3)
             self.conexion.leer_respuesta(timeout_s=1.0)
 
-            # 7. Verificación
+            # 7. Verificación completa byte a byte
             time.sleep(0.5)
             cod_verif = self.leer_coding_uds()
             if cod_verif:
-                self._emit(f"[VERIFICACIÓN] Coding verificado tras grabación: {cod_verif}")
+                cod_verif_limpio = cod_verif.replace(" ", "").upper()
+                self._emit(f"[VERIFICACIÓN] Coding releído tras grabación: {cod_verif}")
+                if cod_verif_limpio == coding_limpio:
+                    return "¡Codificación escrita y confirmada correctamente en la centralita!"
+                else:
+                    self._emit(f"[ERROR] Verificación fallida: Releído [{cod_verif_limpio}] != Escrito [{coding_limpio}]")
+                    return f"Error: Verificación fallida tras escritura. Releído [{cod_verif_limpio}] != Escrito [{coding_limpio}]."
 
-            return "¡Codificación escrita y confirmada correctamente en la centralita!"
+            return "Error: No se pudo verificar la codificación tras la escritura (sin respuesta de relectura)."
         else:
             self._emit(f"[ERROR] La centralita no aceptó el coding: {respuesta}")
             diag_logger.log_transferencia(f"Escritura Coding en {nombre_modulo}", False, respuesta)

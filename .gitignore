@@ -1,4 +1,4 @@
-﻿# Entornos y caches de Python
+# Entornos y caches de Python
 __pycache__/
 *.py[cod]
 *.class
@@ -39,6 +39,7 @@ historial_lecturas/*
 datos/sensores_*.csv
 *.log
 audidiag_registro_detallado.txt
+*tp20_log_*.txt
 *.tmp
 
 # Documentos personales / notas privadas / diagramas html

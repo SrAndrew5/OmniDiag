@@ -91,5 +91,77 @@ class TestNeedleSweepMock(unittest.TestCase):
         self.assertEqual(fake_kwp.write_calls[-1], b"\x04\x00\x00")
 
 
+    def test_codificar_bits_modulo_fuera_de_rango_aborta_sin_rellenar_ceros(self):
+        # Si la centralita tiene 3 bytes y se pide modificar el Byte 5, debe abortar sin escribir nada
+        fake_kwp = FakeKWP(initial_coding=b"\x04\x00\x00", read_source="0x1A 0x9E")
+        self.actions.kwp = fake_kwp
+
+        ok, msg = self.actions._codificar_bits_modulo(
+            addr=0x17,
+            nombre="Cuadro Instrumentos (17)",
+            bits_activar=[(5, 0, True)],
+            etiqueta_backup="TEST_OUT_OF_BOUNDS"
+        )
+        self.assertFalse(ok)
+        self.assertIn("ABORTADO POR SEGURIDAD", msg)
+        self.assertIn("No se extenderá la longitud artificialmente", msg)
+        self.assertEqual(len(fake_kwp.write_calls), 0)
+
+    def test_escribir_coding_seguro_longitud_distinta_aborta(self):
+        # Si se intenta escribir una longitud distinta (ej: 4 bytes cuando el módulo tiene 3), aborta sin escribir
+        fake_kwp = FakeKWP(initial_coding=b"\x04\x00\x00", read_source="0x1A 0x9E")
+        self.actions.kwp = fake_kwp
+
+        ok, msg = self.actions.escribir_coding_seguro(
+            addr=0x17,
+            nombre="Cuadro Instrumentos (17)",
+            nuevo_bytes=b"\x04\x01\x00\xFF",
+            etiqueta_backup="TEST_LEN_MISMATCH"
+        )
+        self.assertFalse(ok)
+        self.assertIn("ABORTADO POR SEGURIDAD", msg)
+        self.assertIn("Longitud incompatible", msg)
+        self.assertEqual(len(fake_kwp.write_calls), 0)
+
+    def test_escribir_coding_seguro_idempotente_sin_escrituras(self):
+        # Si la codificación nueva es idéntica a la actual, retorna True con 0 escrituras
+        fake_kwp = FakeKWP(initial_coding=b"\x04\x01\x00", read_source="0x1A 0x9E")
+        self.actions.kwp = fake_kwp
+
+        ok, msg = self.actions.escribir_coding_seguro(
+            addr=0x17,
+            nombre="Cuadro Instrumentos (17)",
+            nuevo_bytes=b"\x04\x01\x00",
+            etiqueta_backup="TEST_IDEMPOTENT"
+        )
+        self.assertTrue(ok)
+        self.assertIn("Sin cambios", msg)
+        self.assertEqual(len(fake_kwp.write_calls), 0)
+
+    def test_escribir_coding_seguro_rollback_fallido(self):
+        # Si la verificación falla Y además el rollback es rechazado por la ECU
+        fake_kwp = FakeKWP(initial_coding=b"\x04\x00\x00", read_source="0x1A 0x9E")
+        fake_kwp.simulate_verification_mismatch = True
+        self.actions.kwp = fake_kwp
+
+        # Simulamos que tras el primer write_coding, el siguiente write_coding (rollback) es rechazado
+        original_write = fake_kwp.write_coding
+        def write_side_effect(new_bytes):
+            if len(fake_kwp.write_calls) == 1:
+                # El segundo write (rollback) falla
+                return False
+            return original_write(new_bytes)
+        fake_kwp.write_coding = write_side_effect
+
+        ok, msg = self.actions.escribir_coding_seguro(
+            addr=0x17,
+            nombre="Cuadro Instrumentos (17)",
+            nuevo_bytes=b"\x04\x01\x00",
+            etiqueta_backup="TEST_ROLLBACK_FAIL"
+        )
+        self.assertFalse(ok)
+        self.assertIn("CRÍTICO", msg)
+
+
 if __name__ == "__main__":
     unittest.main()
