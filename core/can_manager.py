@@ -114,22 +114,6 @@ class CANManager:
                 except Exception as e:
                     self._emit(f"Fallo al abrir slcan en {puerto}: {e}")
 
-        # 3. Fallback: probar puertos COM genéricos con slcan
-        puertos = [p.device for p in serial.tools.list_ports.comports()]
-        for p in puertos:
-            try:
-                self._emit(f"Probando slcan en {p}...")
-                self.bus = can.Bus(
-                    interface="slcan",
-                    channel=p,
-                    bitrate=self.bitrate
-                )
-                self.connected_interface = f"slcan:{p}"
-                self._emit(f"¡Conectado exitosamente en {p}!")
-                return True
-            except Exception:
-                continue
-
         self._emit("No se detectó ningún adaptador CANable conectado.")
         return False
 
