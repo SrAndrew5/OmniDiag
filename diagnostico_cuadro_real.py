@@ -131,7 +131,7 @@ def ejecutar_diagnostico():
                     bm = BackupManager()
                     bm.guardar_backup(
                         modulo="Cuadro Instrumentos (17)",
-                        coche="WAUZZZ4F000000000",
+                        coche="AUDI_A6_C6_FACELIFT",
                         bytes_coding=hex_str,
                         etiqueta="PRE_NEEDLE_SWEEP_STANDALONE"
                     )

@@ -627,19 +627,18 @@ class KWP2000NativeClient:
 
     def write_coding(self, coding_bytes: bytes) -> bool:
         """
-        Escribe la codificación en el módulo mediante el servicio estándar VAG KWP2000:
-        Service 0x3B (WriteDataByLocalIdentifier) subfunción 0x9E (Coding).
+        Escribe la codificación en el módulo mediante el servicio estándar oficial VAG KWP2000:
+        Service 0x3B (WriteDataByLocalIdentifier) con subfunción 0x9E (Coding).
         """
-        for subfn in (0x9E, 0x00):
-            try:
-                resp = self.execute_service(0x3B, subfunction=subfn, data=coding_bytes)
-                if resp is not None:
-                    diag_logger.log_info(f"[KWP] Codificación escrita correctamente con Service 0x3B sub 0x{subfn:02X}.")
-                    return True
-            except Exception as e:
-                diag_logger.log_info(f"[KWP] Intento 0x3B sub 0x{subfn:02X} falló: {e}")
-                continue
+        try:
+            resp = self.execute_service(0x3B, subfunction=0x9E, data=coding_bytes)
+            if resp is not None:
+                diag_logger.log_info(f"[KWP] Codificación escrita correctamente con Service 0x3B sub 0x9E.")
+                return True
+        except Exception as e:
+            diag_logger.log_error("Fallo escribiendo coding KWP (0x3B 0x9E)", str(e))
+            return False
 
-        diag_logger.log_error("Fallo escribiendo coding KWP", "Ninguna subfunción de Service 0x3B fue aceptada por la centralita")
         return False
+
 

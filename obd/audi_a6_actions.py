@@ -86,11 +86,19 @@ class AudiA6Actions:
                     if self.kwp.write_coding(bytes(coding_list)):
                         time.sleep(0.1)
                         verified_coding = self.kwp.read_coding()
-                        if verified_coding and len(verified_coding) > 1 and (verified_coding[1] & 0x01):
-                            msg = "¡ÉXITO! Needle Sweep activado correctamente vía TP 2.0."
+                        if verified_coding and list(verified_coding) == coding_list:
+                            msg = "¡ÉXITO! Needle Sweep activado y verificado al 100% (byte a byte) vía TP 2.0."
                             self._emit(f"✓ {msg}")
                             return True, msg
-                    return False, "La centralita del Cuadro (17) rechazó la escritura o no confirmó el bit activo."
+                        else:
+                            self._emit("  ⚠ ALERTA: La verificación no confirmó la codificación completa. Ejecutando ROLLBACK automático...")
+                            try:
+                                self.kwp.write_coding(current_coding)
+                                self._emit("  ✓ ROLLBACK completado: Cuadro 17 restaurado a su codificación original de fábrica.")
+                            except Exception as rb_err:
+                                self._emit(f"  ✗ ERROR CRÍTICO: Falló el rollback en Cuadro 17 ({rb_err}).")
+                            return False, "La codificación se grabó pero la verificación falló. Se ejecutó rollback de seguridad."
+                    return False, "La centralita del Cuadro (17) rechazó el comando de escritura KWP2000 (0x3B 0x9E)."
                 else:
                     return False, "El Cuadro de Instrumentos (17) no devolvió una codificación válida vía TP 2.0."
             else:
@@ -252,12 +260,20 @@ class AudiA6Actions:
                 self._emit(f"  ✗ {err_bk}")
                 return False, err_bk
 
-            # Aplicar cambios de bits
+            # 1. Validar que todos los bytes requeridos existan en la codificación leída
+            for byte_idx, bit_idx, _ in bits_activar:
+                if byte_idx >= len(coding_list):
+                    self.tp20.close_channel()
+                    err_len = (
+                        f"ABORTADO POR SEGURIDAD: El módulo {nombre} tiene {len(coding_list)} bytes de codificación, "
+                        f"pero se solicitó modificar el Byte {byte_idx}. No se extenderá la longitud artificialmente."
+                    )
+                    self._emit(f"  ✗ {err_len}")
+                    return False, err_len
+
+            # 2. Aplicar cambios de bits
             modificado = False
             for byte_idx, bit_idx, activar in bits_activar:
-                if byte_idx >= len(coding_list):
-                    # Extender si hace falta (raro, pero seguro)
-                    coding_list.extend([0x00] * (byte_idx - len(coding_list) + 1))
                 valor_actual = coding_list[byte_idx]
                 if activar:
                     nuevo_valor = valor_actual | (1 << bit_idx)
@@ -285,32 +301,27 @@ class AudiA6Actions:
                 f"  Nuevo coding: " + " ".join(f"{b:02X}" for b in coding_list)
             )
 
-            # Escribir
+            # 3. Escribir nueva codificación
             if not self.kwp.write_coding(bytes(coding_list)):
                 self.tp20.close_channel()
                 return False, f"El módulo 0x{addr:02X} rechazó la escritura."
 
             time.sleep(0.1)
 
-            # Verificar
+            # 4. Verificación completa byte a byte + Rollback automático si no coincide
             verified = self.kwp.read_coding()
-            self.tp20.close_channel()
-
             if verified and list(verified) == coding_list:
-                return True, "Codificación grabada y verificada correctamente."
-            elif verified:
-                # Verificar al menos que los bits objetivo estén correctos
-                vlist = list(verified)
-                bits_ok = all(
-                    ((vlist[bi] >> bit) & 1) == (1 if act else 0)
-                    for bi, bit, act in bits_activar
-                    if bi < len(vlist)
-                )
-                if bits_ok:
-                    return True, "Codificación grabada (verificación de bits OK)."
-                return False, "Codificación escrita pero verificación de bits falló."
+                self.tp20.close_channel()
+                return True, "Codificación grabada y verificada al 100% (byte a byte)."
             else:
-                return False, "Escritura enviada pero no se pudo verificar la lectura."
+                self._emit(f"  ⚠ ALERTA: La verificación no coincide con lo esperado. Ejecutando ROLLBACK automático...")
+                try:
+                    self.kwp.write_coding(current_coding)
+                    self._emit(f"  ✓ ROLLBACK completado: Codificación original restaurada.")
+                except Exception as rollback_err:
+                    self._emit(f"  ✗ ERROR CRÍTICO: Falló el rollback automático ({rollback_err}).")
+                self.tp20.close_channel()
+                return False, "Codificación fallida en verificación. Se ejecutó restauración de seguridad."
 
         except Exception as e:
             err = f"Error en módulo 0x{addr:02X}: {e}"
