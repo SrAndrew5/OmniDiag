@@ -1297,6 +1297,15 @@ class MainWindow(QMainWindow):
         self.btn_needle.clicked.connect(self.activar_needle_sweep_rapido)
         fila_actions.addWidget(self.btn_needle)
 
+        self.btn_retrovisores = QPushButton("🪞  Plegado Retrovisores Automático (1-Click)")
+        self.btn_retrovisores.setProperty("class", "btn-accion")
+        self.btn_retrovisores.setFixedHeight(38)
+        self.btn_retrovisores.setToolTip(
+            "Codifica Módulos 46 + 42 + 52 para plegar/desplegar retrovisores automáticamente con el mando"
+        )
+        self.btn_retrovisores.clicked.connect(self.activar_plegado_retrovisores_rapido)
+        fila_actions.addWidget(self.btn_retrovisores)
+
         btn_guardar_backup = QPushButton("💾  Guardar Backup Manual")
         btn_guardar_backup.setProperty("class", "btn-secundario")
         btn_guardar_backup.setFixedHeight(38)
@@ -2866,6 +2875,8 @@ class MainWindow(QMainWindow):
                 self.txt_coding_nuevo.setPlaceholderText("Se actualiza al seleccionar opciones de confort...")
             if hasattr(self, "btn_needle"):
                 self.btn_needle.setVisible(False)
+            if hasattr(self, "btn_retrovisores"):
+                self.btn_retrovisores.setVisible(False)
             if hasattr(self, "btn_gw"):
                 self.btn_gw.setVisible(False)
             if hasattr(self, "tabs_coding"):
@@ -2972,8 +2983,11 @@ class MainWindow(QMainWindow):
                 )
             if hasattr(self, "btn_needle"):
                 self.btn_needle.setVisible(True)
+            if hasattr(self, "btn_retrovisores"):
+                self.btn_retrovisores.setVisible(False)  # Solo aplica en Audi A6
             if hasattr(self, "btn_gw"):
                 self.btn_gw.setVisible(False)
+
             if hasattr(self, "tabs_coding"):
                 self.tabs_coding.setTabText(0, "🚗  Funciones de Confort — Opel Corsa D")
                 self.tabs_coding.setTabVisible(1, True)
@@ -3068,6 +3082,9 @@ class MainWindow(QMainWindow):
                 )
             if hasattr(self, "btn_needle"):
                 self.btn_needle.setVisible(True)
+            if hasattr(self, "btn_retrovisores"):
+                self.btn_retrovisores.setVisible(True)  # Aplica en Audi A6 con motor de plegado
+
             if hasattr(self, "btn_gw"):
                 self.btn_gw.setVisible(True)
             if hasattr(self, "tabs_coding"):
@@ -3257,6 +3274,31 @@ class MainWindow(QMainWindow):
             self.escribir_consola("\n[ACCION] Iniciando activación de Needle Sweep...")
             self.combo_coding.setCurrentText("Cuadro Instrumentos (17)")
             self.worker.set_accion("activar_needle_sweep")
+            self.worker.start()
+
+    def activar_plegado_retrovisores_rapido(self):
+        """
+        Codifica los Módulos 46 + 42 + 52 para activar el plegado automático
+        de retrovisores al cerrar/abrir el coche con el mando. 1 solo clic.
+        """
+        resp = QMessageBox.question(
+            self, "🪞 Plegado Automático de Retrovisores",
+            "¿Deseas activar el plegado automático de retrovisores al usar el mando?\n\n"
+            "El sistema codificará automáticamente:\n"
+            "  • Módulo 46 (Confort J393) → habilita lógica de plegado\n"
+            "  • Módulo 42 (Puerta Conductor J386) → declara motor de plegado\n"
+            "  • Módulo 52 (Puerta Copiloto J387) → declara motor de plegado\n\n"
+            "⚠ Requisito: Los retrovisores deben tener motor de plegado físico\n"
+            "(verificado si se pliegan con la rueda de la puerta).\n\n"
+            "Se creará backup automático antes de cualquier escritura.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if resp == QMessageBox.StandardButton.Yes:
+            self.escribir_consola(
+                "\n[ACCION] Iniciando codificación de plegado automático de retrovisores...\n"
+                "  → Conectando a Módulo 46 (Confort), 42 (Puerta conductor), 52 (Puerta copiloto)"
+            )
+            self.worker.set_accion("activar_plegado_retrovisores")
             self.worker.start()
 
     def leer_coding(self):

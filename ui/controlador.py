@@ -375,6 +375,8 @@ class MotorDiagnostico(QThread):
                 "adaptacion_escribir": self._adaptacion_escribir,
                 "test_actuador":       self._test_actuador,
                 "activar_needle_sweep": self._activar_needle_sweep,
+                "activar_plegado_retrovisores": self._activar_plegado_retrovisores,
+
                 "auditar_km":          self._auditar_km,
                 "epb_abrir":           self._epb_abrir,
                 "epb_cerrar":          self._epb_cerrar,
@@ -1588,6 +1590,29 @@ class MotorDiagnostico(QThread):
             time.sleep(1.0)
             self._log("[✓ ÉXITO] Needle Sweep activado: Byte 1 Bit 0 cambiado a 1 (simulado).")
             self.coding_signal.emit("04 01 00")
+
+    def _activar_plegado_retrovisores(self):
+        """Codifica Módulos 46 + 42 + 52 para plegado automático de retrovisores."""
+        self._log("\n[OBJETIVO] Activando plegado automático de retrovisores...")
+        self._log("  → Módulos objetivo: 46 (Confort J393) | 42 (Puerta conductor J386) | 52 (Puerta copiloto J387)")
+        if self.hardware_tipo == "CANABLE":
+            ok, msg = self.a6_actions.activar_plegado_retrovisores(
+                plegar_al_cerrar=True,
+                desplegar_al_abrir=True,
+            )
+            if ok:
+                self._log(f"\n[✓ ÉXITO] {msg}")
+            else:
+                self._log(f"\n[ERROR] {msg}")
+        else:
+            # Modo simulado / banco
+            time.sleep(0.5)
+            self._log("  [SIMULADO] Módulo 46 → Byte 4: Bit 4 activado (plegar al cerrar), Bit 6 activado (desplegar al abrir)")
+            time.sleep(0.3)
+            self._log("  [SIMULADO] Módulo 42 → Byte 4: Bit 4 activado (Foldable Mirrors Installed - conductor)")
+            time.sleep(0.3)
+            self._log("  [SIMULADO] Módulo 52 → Byte 4: Bit 4 activado (Foldable Mirrors Installed - copiloto)")
+            self._log("[✓ ÉXITO] Plegado automático de retrovisores activado (simulado). 3/3 módulos codificados.")
 
     # ──────────────────────────────────────────────────────────────────────────
     #  ADAPTACIONES

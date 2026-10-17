@@ -163,7 +163,220 @@ class AudiA6Actions:
             self.tp20.close_channel()
 
     # ──────────────────────────────────────────────────────────────────────────
-    #  OBJETIVO 2: DIAGNÓSTICO Y BORRADO DE LUCES (MÓDULO 09 - J519)
+    #  OBJETIVO 2: PLEGADO AUTOMÁTICO DE RETROVISORES CON EL MANDO
+    #  Módulo 46 (Confort J393) → Byte 4: Bit 4 (plegar al cerrar), Bit 6 (desplegar al abrir)
+    #  Módulo 42 (J386 Puerta Conductor) → Byte 4: Bit 4 (Foldable Mirrors Installed)
+    #  Módulo 52 (J387 Puerta Copiloto)  → Byte 4: Bit 4 (Foldable Mirrors Installed)
+    # ──────────────────────────────────────────────────────────────────────────
+    def activar_plegado_retrovisores(
+        self,
+        plegar_al_cerrar: bool = True,
+        desplegar_al_abrir: bool = True,
+    ) -> Tuple[bool, str]:
+        """
+        Activa el plegado automático de retrovisores al cerrar/abrir con el mando.
+
+        Codifica tres módulos en secuencia:
+          1. Módulo 46 (Confort J393): habilita lógica de plegado en CAN Confort.
+          2. Módulo 42 (J386, puerta conductor): declara motor de plegado presente.
+          3. Módulo 52 (J387, puerta copiloto): declara motor de plegado presente.
+
+        Precondición: Los retrovisores DEBEN tener motor de plegado físico
+        (verificado: se pliegan manualmente desde la rueda de la puerta).
+        """
+        self._emit("\n" + "=" * 60)
+        self._emit("  ACTIVANDO PLEGADO AUTOMÁTICO DE RETROVISORES")
+        self._emit("=" * 60)
+        self._emit(f"  → Plegar al cerrar con mando : {'SÍ' if plegar_al_cerrar else 'NO'}")
+        self._emit(f"  → Desplegar al abrir con mando: {'SÍ' if desplegar_al_abrir else 'NO'}")
+
+        errores = []
+
+        # ── PASO 1: Módulo 46 — Centralita de Confort J393 ──────────────────
+        self._emit("\n[PASO 1/3] Módulo 46 — Confort J393 (lógica de plegado)")
+        ok_46, msg_46 = self._codificar_bits_modulo(
+            addr=0x46,
+            nombre="Confort / Electrónica (46)",
+            bits_activar=[
+                (4, 4, plegar_al_cerrar),    # Byte 4, Bit 4 → plegar al cerrar
+                (4, 6, desplegar_al_abrir),  # Byte 4, Bit 6 → desplegar al abrir
+            ],
+            etiqueta_backup="PRE_RETRO_MOD46"
+        )
+        self._emit(f"  {'✓' if ok_46 else '✗'} Módulo 46: {msg_46}")
+        if not ok_46:
+            errores.append(f"Módulo 46: {msg_46}")
+
+        # ── PASO 2: Módulo 42 — Puerta Conductor J386 ───────────────────────
+        self._emit("\n[PASO 2/3] Módulo 42 — Puerta Conductor J386 (Foldable Mirrors Installed)")
+        ok_42, msg_42 = self._codificar_bits_modulo(
+            addr=0x42,
+            nombre="Puerta Conductor (42)",
+            bits_activar=[
+                (4, 4, True),  # Byte 4, Bit 4 → Foldable Mirrors Installed
+            ],
+            etiqueta_backup="PRE_RETRO_MOD42"
+        )
+        self._emit(f"  {'✓' if ok_42 else '✗'} Módulo 42: {msg_42}")
+        if not ok_42:
+            errores.append(f"Módulo 42: {msg_42}")
+
+        # ── PASO 3: Módulo 52 — Puerta Copiloto J387 ────────────────────────
+        self._emit("\n[PASO 3/3] Módulo 52 — Puerta Copiloto J387 (Foldable Mirrors Installed)")
+        ok_52, msg_52 = self._codificar_bits_modulo(
+            addr=0x52,
+            nombre="Puerta Pasajero (52)",
+            bits_activar=[
+                (4, 4, True),  # Byte 4, Bit 4 → Foldable Mirrors Installed
+            ],
+            etiqueta_backup="PRE_RETRO_MOD52"
+        )
+        self._emit(f"  {'✓' if ok_52 else '✗'} Módulo 52: {msg_52}")
+        if not ok_52:
+            errores.append(f"Módulo 52: {msg_52}")
+
+        # ── RESULTADO FINAL ──────────────────────────────────────────────────
+        self._emit("\n" + "─" * 60)
+        if not errores:
+            msg_final = (
+                "¡ÉXITO! Los tres módulos codificados correctamente.\n"
+                "Ahora cierra el coche con el mando — los retrovisores se plegarán solos.\n"
+                "Al abrir, se desplegarán automáticamente."
+            )
+            self._emit(f"✓ {msg_final}")
+            return True, msg_final
+        elif ok_46 or ok_42 or ok_52:
+            msg_final = (
+                f"Codificación parcial. Módulos con error: {'; '.join(errores)}.\n"
+                "El plegado puede funcionar de forma incompleta. Revisa los módulos con error."
+            )
+            self._emit(f"⚠ {msg_final}")
+            return False, msg_final
+        else:
+            msg_final = (
+                f"Fallo total en los tres módulos. Errores: {'; '.join(errores)}.\n"
+                "Verifica que el contacto esté encendido y el CANable conectado."
+            )
+            self._emit(f"✗ {msg_final}")
+            return False, msg_final
+
+    def _codificar_bits_modulo(
+        self,
+        addr: int,
+        nombre: str,
+        bits_activar: list,  # lista de (byte_idx, bit_idx, activar: bool)
+        etiqueta_backup: str = "PRE_CODING"
+    ) -> Tuple[bool, str]:
+        """
+        Método interno: conecta a un módulo vía TP 2.0, lee su Long Coding,
+        modifica los bits indicados y escribe el resultado.
+
+        bits_activar: lista de tuplas (byte_index, bit_index, activar)
+        """
+        try:
+            self.can.flush_rx()
+            retries = 2 if addr in (0x08, 0x09, 0x15, 0x17, 0x42, 0x46, 0x52, 0x5F) else 1
+            if not self.tp20.open_channel(addr, retries=retries):
+                return False, f"Sin respuesta del módulo (0x{addr:02X}). ¿Contacto encendido?"
+
+            self.kwp.start_diagnostic_session(0x86)
+            time.sleep(0.05)
+
+            current_coding = self.kwp.read_coding()
+            if not current_coding or len(current_coding) == 0:
+                self.tp20.close_channel()
+                return False, f"El módulo 0x{addr:02X} no devolvió codificación."
+
+            coding_list = list(current_coding)
+            self._emit(
+                f"  Coding actual ({len(coding_list)} bytes): "
+                + " ".join(f"{b:02X}" for b in coding_list)
+            )
+
+            # Guardar backup obligatorio
+            try:
+                from gestion.backup_manager import BackupManager
+                bm = BackupManager()
+                bm.guardar_backup(
+                    modulo=nombre,
+                    coche="WAUZZZ4F000000000",
+                    bytes_coding=" ".join(f"{b:02X}" for b in coding_list),
+                    etiqueta=etiqueta_backup
+                )
+            except Exception:
+                pass
+
+            # Aplicar cambios de bits
+            modificado = False
+            for byte_idx, bit_idx, activar in bits_activar:
+                if byte_idx >= len(coding_list):
+                    # Extender si hace falta (raro, pero seguro)
+                    coding_list.extend([0x00] * (byte_idx - len(coding_list) + 1))
+                valor_actual = coding_list[byte_idx]
+                if activar:
+                    nuevo_valor = valor_actual | (1 << bit_idx)
+                else:
+                    nuevo_valor = valor_actual & ~(1 << bit_idx)
+                if nuevo_valor != valor_actual:
+                    self._emit(
+                        f"  Byte {byte_idx} Bit {bit_idx}: "
+                        f"0x{valor_actual:02X} → 0x{nuevo_valor:02X} "
+                        f"({'activado' if activar else 'desactivado'})"
+                    )
+                    coding_list[byte_idx] = nuevo_valor
+                    modificado = True
+                else:
+                    self._emit(
+                        f"  Byte {byte_idx} Bit {bit_idx}: ya estaba "
+                        f"{'activado' if activar else 'desactivado'}, sin cambio."
+                    )
+
+            if not modificado:
+                self.tp20.close_channel()
+                return True, "Sin cambios necesarios (bits ya en el estado deseado)."
+
+            self._emit(
+                f"  Nuevo coding: " + " ".join(f"{b:02X}" for b in coding_list)
+            )
+
+            # Escribir
+            if not self.kwp.write_coding(bytes(coding_list)):
+                self.tp20.close_channel()
+                return False, f"El módulo 0x{addr:02X} rechazó la escritura."
+
+            time.sleep(0.1)
+
+            # Verificar
+            verified = self.kwp.read_coding()
+            self.tp20.close_channel()
+
+            if verified and list(verified) == coding_list:
+                return True, "Codificación grabada y verificada correctamente."
+            elif verified:
+                # Verificar al menos que los bits objetivo estén correctos
+                vlist = list(verified)
+                bits_ok = all(
+                    ((vlist[bi] >> bit) & 1) == (1 if act else 0)
+                    for bi, bit, act in bits_activar
+                    if bi < len(vlist)
+                )
+                if bits_ok:
+                    return True, "Codificación grabada (verificación de bits OK)."
+                return False, "Codificación escrita pero verificación de bits falló."
+            else:
+                return False, "Escritura enviada pero no se pudo verificar la lectura."
+
+        except Exception as e:
+            err = f"Error en módulo 0x{addr:02X}: {e}"
+            self._emit(f"  ✗ {err}")
+            try:
+                self.tp20.close_channel()
+            except Exception:
+                pass
+            return False, err
+
+    # ──────────────────────────────────────────────────────────────────────────
+    #  OBJETIVO 3: DIAGNÓSTICO Y BORRADO DE LUCES (MÓDULO 09 - J519)
     # ──────────────────────────────────────────────────────────────────────────
     def gestionar_luces_modulo_09(self, borrar: bool = False) -> Tuple[bool, List[str]]:
         """
