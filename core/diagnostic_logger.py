@@ -101,6 +101,10 @@ class DiagnosticLogger:
     def log_info(self, mensaje: str):
         self.log("INFO", mensaje)
 
+    def log_debug(self, mensaje: str):
+        """Registra trazas de bajo nivel (tramas TP 2.0, ACKs, reintentos, opcodes ignorados)."""
+        self.log("DEBUG", mensaje)
+
     def log_alerta(self, mensaje: str):
         self.log("ALERTA", mensaje)
 
