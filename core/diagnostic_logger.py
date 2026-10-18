@@ -1,11 +1,12 @@
 # diagnostic_logger.py
 import os
-import sys
 from datetime import datetime
 import threading
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config
+
+# Tamaño máximo del archivo de log antes de rotar (10 MB)
+MAX_LOG_BYTES = 10 * 1024 * 1024
 
 
 class DiagnosticLogger:
@@ -55,8 +56,24 @@ class DiagnosticLogger:
         except Exception as e:
             print(f"[DiagnosticLogger] Error al iniciar archivo de log: {e}")
 
+    def _rotar_si_necesario(self):
+        """Rota el log si supera MAX_LOG_BYTES, archivándolo con marca de fecha/hora."""
+        try:
+            if os.path.exists(self.log_path) and os.path.getsize(self.log_path) > MAX_LOG_BYTES:
+                base, ext = os.path.splitext(self.log_path)
+                sello = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+                rotado = f"{base}_{sello}{ext}"
+                contador = 1
+                while os.path.exists(rotado):
+                    rotado = f"{base}_{sello}_{contador}{ext}"
+                    contador += 1
+                os.rename(self.log_path, rotado)
+        except Exception as e:
+            print(f"[DiagnosticLogger] Error al rotar el log: {e}")
+
     def log(self, etiqueta: str, mensaje: str):
         """Escribe una línea formateada con timestamp y etiqueta."""
+        self._rotar_si_necesario()
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
         linea = f"[{ts}] [{etiqueta:<7}] {mensaje}\n"
         try:

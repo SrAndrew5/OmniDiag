@@ -39,6 +39,8 @@ historial_lecturas/*
 datos/sensores_*.csv
 *.log
 audidiag_registro_detallado.txt
+audidiag_registro_detallado_*.txt
+audidiag_registro_detallado.txt.*
 *tp20_log_*.txt
 *.tmp
 

@@ -2,10 +2,6 @@
 """
 Guarda un histórico de lecturas en vivo en la base de datos SQLite.
 """
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 from gestion.database_manager import DatabaseManager
 
 class HistorialLecturas:

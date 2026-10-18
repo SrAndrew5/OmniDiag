@@ -7,10 +7,6 @@
 #   - Modo simulado para pruebas de UI y validación de codificaciones
 # ══════════════════════════════════════════════════════════════════════════════
 
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 from PyQt6.QtCore import QThread, pyqtSignal
 from core.connection import Connection
 from core.can_manager import CANManager
@@ -1488,18 +1484,50 @@ class MotorDiagnostico(QThread):
                         break
             tx_id = cfg.get("tx_id", 0x7E4) if cfg else 0x7E4
             rx_id = cfg.get("rx_id", 0x7EC) if cfg else 0x7EC
+
             if self.hardware_tipo == "CANABLE":
+                # Validar el hexadecimal ANTES de tocar la centralita
                 try:
-                    iso = ISOTPClient(self.can_mgr, tx_id, rx_id, timeout=0.8)
-                    uds = UDSClient(iso)
-                    uds.diagnostic_session_control(0x03)
-                    time.sleep(0.05)
                     bytes_data = bytes.fromhex(nuevo)
-                    uds.send_service(0x2E, bytes([0x01, 0x00]) + bytes_data)
-                except Exception:
-                    pass
+                except ValueError as ve:
+                    self._log(f"[ERROR] Codificación hexadecimal inválida: {ve}")
+                    return
+
+                iso = ISOTPClient(self.can_mgr, tx_id, rx_id, timeout=0.8)
+                uds = UDSClient(iso)
+                try:
+                    # 1) Leer el coding actual y validar longitud antes de escribir
+                    #    (read_coding() gestiona internamente la sesión diagnóstica)
+                    actual = uds.read_coding()
+                    if not actual:
+                        self._log(f"[ERROR] No se pudo leer la codificación actual de {modulo}. Escritura abortada.")
+                        return
+                    if len(actual) != len(bytes_data):
+                        self._log(f"[ERROR] Longitud incompatible: nueva {len(bytes_data)} B vs actual {len(actual)} B. Abortado por seguridad.")
+                        return
+
+                    # 2) Escribir por el DID de coding (0x0600/0x0601), NO por 0x0100
+                    if not uds.write_coding(bytes_data):
+                        self._log(f"[ERROR] La centralita {modulo} rechazó la escritura de codificación.")
+                        return
+                    time.sleep(0.1)
+
+                    # 3) Verificación byte a byte: sin verificación no hay éxito
+                    verificado = uds.read_coding()
+                    if verificado and bytes(verificado) == bytes_data:
+                        self._log(f"[✓ ÉXITO] Codificación grabada y verificada byte a byte en {modulo} (Opel Corsa).")
+                        self.coding_signal.emit(nuevo)
+                    else:
+                        releido = verificado.hex() if verificado else "NINGUNO"
+                        self._log(f"[ERROR] Verificación fallida: escrito [{bytes_data.hex()}] vs releído [{releido}]. Revisa el módulo.")
+                    return
+                except Exception as e:
+                    self._log(f"[ERROR] Fallo escribiendo codificación en {modulo}: {e}")
+                    return
+
+            # Modo simulado / banco
             time.sleep(0.3)
-            self._log(f"[✓ ÉXITO] Codificación grabada exitosamente en {modulo} (Opel Corsa).")
+            self._log(f"[✓ ÉXITO] Codificación grabada exitosamente en {modulo} (Opel Corsa) [simulado].")
             return
 
         if self.es_modo_kline:

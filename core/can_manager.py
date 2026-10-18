@@ -145,7 +145,6 @@ class CANManager:
                 self.bus = None
                 self.connected_interface = None
                 try:
-                    b.__del__ = lambda: None
                     if hasattr(b, '_is_shutdown'):
                         b._is_shutdown = True
                     b.shutdown()

@@ -4,9 +4,7 @@ Gestiona lectura y borrado de fallos (DTCs), con histórico de qué se ha
 borrado y cuándo, ya que el modo 04 de OBD2 borra TODOS los fallos de golpe
 (no existe borrado selectivo en el estándar).
 """
-import sys
 import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import json
 from datetime import datetime

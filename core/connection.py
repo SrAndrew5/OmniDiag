@@ -1,8 +1,4 @@
 # connection.py
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 import serial
 import serial.tools.list_ports
 import time

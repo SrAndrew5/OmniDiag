@@ -9,7 +9,7 @@
 
 > **Languages:** [English](README.md) | [Español](README_ES.md)
 
-**OmniDiag** is an open-source, modular automotive diagnostic, live telemetry, and ECU coding suite engineered for **VAG (Audi, Volkswagen, SEAT, Škoda)** and **General Motors (Opel)** vehicles. 
+**OmniDiag** is a modular automotive diagnostic, live telemetry, and ECU coding suite with source-visible (view-only, portfolio/CV) code, engineered for **VAG (Audi, Volkswagen, SEAT, Škoda)** and **General Motors (Opel)** vehicles. 
 
 Built with **Python** and **PyQt6**, OmniDiag implements native low-level communication protocols (**VW TP 2.0**, **KWP1281 / K-Line Pin 7**, **UDS / ISO 14229**, and **GMLAN / ISO 15765**) providing dealer-level diagnostic capabilities, guided service wizards, real-time vector telemetry, component actuator tests, and forensic mileage auditing without relying on expensive proprietary diagnostic tools.
 
