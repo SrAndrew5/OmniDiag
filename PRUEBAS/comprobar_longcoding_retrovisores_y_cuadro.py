@@ -3,11 +3,16 @@ PRUEBAS/comprobar_longcoding_retrovisores_y_cuadro.py
 ══════════════════════════════════════════════════════════════════════════════
 Script de diagnóstico y lectura forense de Long Coding (100% SOLO LECTURA).
 
-IMPORTANTE — dos protocolos distintos según el módulo:
-  - 0x17 Cuadro J285  → UDS / ISO-TP  (TX 0x714 / RX 0x77E)   [facelift]
+IMPORTANTE — TODOS los módulos se interrogan por VW TP 2.0 / KWP2000
+a través de la Gateway J533:
+  - 0x17 Cuadro J285  → VW TP 2.0 / KWP2000
   - 0x46 Confort J393 → VW TP 2.0 / KWP2000
   - 0x42 Puerta Conductor J386 → VW TP 2.0 / KWP2000
   - 0x52 Puerta Copiloto J387   → VW TP 2.0 / KWP2000
+
+Nota: El Cuadro 17 del A6 C6 (4F) NO responde por UDS ISO-TP directo
+(0x714/0x77E); eso es de plataformas posteriores (A4 B8 / A6 C7). En el C6
+se alcanza por TP 2.0 con dirección lógica 0x17, igual que el resto.
 
 Inspecciona:
   - 0x17: Needle Sweep / Staging (Byte 1 Bit 0) y Lap Timer (Bit 3)
@@ -26,7 +31,6 @@ Uso:
 import sys
 import os
 import time
-import struct
 import logging
 import datetime
 
@@ -44,7 +48,6 @@ if BASE_DIR not in sys.path:
 
 from core.can_manager import CANManager
 from obd.tp20_can import TP20Transport, KWP2000NativeClient, KWPError
-from obd.isotp_uds import ISOTPClient
 
 # ── CONFIGURACIÓN DEL LOGGER ──────────────────────────────────────────────
 log_dir = os.path.join(BASE_DIR, "datos", "reportes")
@@ -70,12 +73,9 @@ console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
 
 
-# ── MÓDULOS SEGÚN PROTOCOLO ────────────────────────────────────────────────
-# (Según GUIA_ANTIGRAVITY_PORTATIL.md: 17 es UDS; 46/42/52 son TP 2.0.)
-MODULOS_UDS = {
-    0x17: {"tx": 0x714, "rx": 0x77E, "nombre": "Cuadro de Instrumentos J285 (17)"},
-}
+# ── MÓDULOS (todos por VW TP 2.0 / KWP2000 vía Gateway J533) ───────────────
 MODULOS_TP20 = {
+    0x17: "Cuadro de Instrumentos J285 (17)",
     0x46: "Centralita de Confort J393 (46)",
     0x42: "Puerta Conductor J386 (42)",
     0x52: "Puerta Copiloto J387 (52)",
@@ -166,82 +166,7 @@ def leer_voltaje_bateria(can_mgr: CANManager) -> float:
         return None
 
 
-# ── LECTURA UDS (Cuadro 17) ────────────────────────────────────────────────
-def _uds_peticion(can_mgr: CANManager, tx_id: int, rx_id: int,
-                  service: int, data: bytes = b"", timeout: float = 0.6):
-    """Envía una petición UDS sobre ISO-TP y devuelve la respuesta completa o None."""
-    try:
-        isotp = ISOTPClient(can_mgr, tx_id=tx_id, rx_id=rx_id, timeout=timeout)
-        req = bytes([service]) + data
-        return isotp.send_and_recv(req, timeout=timeout)
-    except Exception:
-        return None
-
-
-def escanear_modulo_uds(can_mgr: CANManager, addr: int, info: dict) -> dict:
-    resultado = {"addr": addr, "nombre": info["nombre"], "canal": False,
-                 "coding": None, "fuente": None, "error": None}
-
-    logger.info(f"\n{'─' * 60}")
-    logger.info(f"[*] ESCANEANDO: {info['nombre']} (UDS/ISO-TP)")
-    logger.info(f"{'─' * 60}")
-
-    t_start = time.perf_counter()
-
-    # 1. Despertar funcional global (broadcast 0x7DF), como hace test_cuadro_uds_full.py
-    try:
-        can_mgr.flush_rx()
-        logger.info("  [1/3] Despertar funcional 0x7DF (Sesión 0x01)...")
-        can_mgr.send_frame(0x7DF, bytes([0x02, 0x10, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00]))
-        time.sleep(0.06)
-    except Exception as e:
-        logger.debug(f"  (despertar funcional no disponible: {e})")
-
-    # 2. Probar pares de IDs candidatos (estándar VAG y mapeo directo)
-    pares = [
-        (info.get("tx", 0x714), info.get("rx", 0x77E), "VAG Dashboard UDS"),
-        (0x717, 0x781, "Mapeo directo 0x17"),
-    ]
-    for tx, rx, desc in pares:
-        logger.info(f"  [2/3] Probando {desc}: TX 0x{tx:03X} / RX 0x{rx:03X}")
-
-        # Sesión extendida 0x03
-        resp = _uds_peticion(can_mgr, tx, rx, 0x10, b"\x03")
-        if resp is None:
-            logger.info("        ↳ sin respuesta a la sesión 0x03")
-            continue
-        if resp and resp[0] == 0x7F:
-            nrc = resp[2] if len(resp) > 2 else 0
-            logger.info(f"        ↳ NRC 0x{nrc:02X} (sesión rechazada)")
-        else:
-            logger.info(f"        ↳ sesión aceptada: {resp.hex().upper()}")
-
-        # Codificación larga (DIDs 0x0600 / 0x0601)
-        for did in (0x0600, 0x0601):
-            resp = _uds_peticion(can_mgr, tx, rx, 0x22, struct.pack(">H", did))
-            if resp is None:
-                logger.info(f"        DID 0x{did:04X}: sin respuesta")
-                continue
-            logger.info(f"        DID 0x{did:04X}: {resp.hex().upper()}")
-            if len(resp) >= 3 and resp[0] == 0x62:
-                coding = resp[3:]
-                if len(coding) >= 2:
-                    resultado["coding"] = coding
-                    resultado["fuente"] = f"UDS 0x{did:04X} ({desc})"
-                    resultado["canal"] = True
-                    analizar_coding(addr, coding)
-                    logger.info(f"  ℹ️ Fuente de lectura: {resultado['fuente']}")
-                    return resultado
-
-    elapsed_ms = (time.perf_counter() - t_start) * 1000
-    resultado["error"] = "sin respuesta UDS en 0x714/0x77E ni en 0x717/0x781"
-    logger.warning(f"  ⚠️ No se pudo leer la codificación de 0x{addr:02X} "
-                   f"por UDS ({elapsed_ms:.0f} ms).")
-    logger.warning(f"     Detalle: {resultado['error']}")
-    return resultado
-
-
-# ── LECTURA TP 2.0 (Puertas 42 y 52) ───────────────────────────────────────
+# ── LECTURA TP 2.0 (Cuadro 17, Confort 46, Puertas 42/52) ──────────────────
 def escanear_modulo_tp20(tp20: TP20Transport, kwp: LoggedKWPClient,
                          addr: int, nombre: str) -> dict:
     resultado = {"addr": addr, "nombre": nombre, "canal": False,
@@ -390,8 +315,7 @@ def escanear_direcciones(can_mgr: CANManager) -> None:
     logger.info("=" * 70)
     logger.info(" MODO SCAN: DIRECCIONES LÓGICAS QUE RESPONDEN AL GATEWAY (TP 2.0)")
     logger.info("=" * 70)
-    logger.info(" Nota: los módulos UDS (17, 46, ...) NO responden aquí por diseño;")
-    logger.info("       usan ISO-TP directo, no el Channel Setup del Gateway.")
+    logger.info(" Nota: todos los módulos se alcanzan por TP 2.0 a través de la Gateway.")
 
     tp = TP20Transport(can_mgr, timeout=0.8)
     encontrados = []
@@ -467,7 +391,7 @@ def main():
         logger.info("[1.5/2] No se pudo leer el voltaje de batería por OBD (continúa).")
     logger.info("")
 
-    # 2. Transporte TP 2.0 (para Confort 46 y puertas 42/52)
+    # 2. Transporte TP 2.0 (para Cuadro 17, Confort 46 y puertas 42/52)
     tp20 = TP20Transport(
         can_mgr,
         timeout=1.2,
@@ -482,16 +406,7 @@ def main():
 
     resultados = []
 
-    # 3. Módulos UDS (Cuadro 17) — ISO-TP directo
-    for addr, info in MODULOS_UDS.items():
-        try:
-            can_mgr.flush_rx()
-        except Exception:
-            pass
-        resultados.append(escanear_modulo_uds(can_mgr, addr, info))
-        time.sleep(0.2)
-
-    # 4. Módulos TP 2.0 (Confort 46, Puertas 42/52)
+    # 3. Módulos TP 2.0 (Cuadro 17, Confort 46, Puertas 42/52)
     for addr, nombre in MODULOS_TP20.items():
         try:
             can_mgr.flush_rx()
