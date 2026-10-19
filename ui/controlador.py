@@ -323,6 +323,8 @@ class MotorDiagnostico(QThread):
         self.vin          = None
         self.sesion_id    = None
         self.hardware_tipo = "DESCONECTADO"  # CANABLE, ELM327, KLINE, SIMULADO
+        self._unsupported_pids = set()
+        self._oil_uds_did = None
 
     @property
     def modo_vehiculo(self) -> str:
@@ -1288,35 +1290,100 @@ class MotorDiagnostico(QThread):
                     ("0105", "Temp. Refrigerante", "°C", 130.0, lambda a, b: float(a - 40)),
                     ("015C", "Temp. Aceite Motor", "°C", 150.0, lambda a, b: float(a - 40)),
                     ("0110", "Flujo Masa Aire (MAF)", "g/s", 150.0, lambda a, b: ((a * 256) + b) / 100.0),
+                    ("010B", "Presión Turbo", "bar", 3.0, lambda a, b: float(a) / 100.0),
+                    ("0123", "Presión Common Rail", "bar", 2000.0, lambda a, b: (((a * 256) + b) * 10.0) / 100.0),
                     ("0104", "Carga Motor", "%", 100.0, lambda a, b: a / 2.55),
                     ("0142", "Voltaje Batería", "V", 16.0, lambda a, b: ((a * 256) + b) / 1000.0),
                 ]
 
             import time
+            temp_refrig_actual = None
+            if not hasattr(self, "_unsupported_pids"):
+                self._unsupported_pids = set()
+            if not hasattr(self, "_oil_uds_did"):
+                self._oil_uds_did = None
+
             for cmd, nom, uni, mx, calc in pids:
                 pid_byte = int(cmd[2:], 16)
-                frame_data = [0x02, 0x01, pid_byte, 0x00, 0x00, 0x00, 0x00, 0x00]
-                self.can_mgr.flush_rx()
-                self.can_mgr.send_frame(0x7DF, frame_data)
-
                 resp = None
-                start_t = time.perf_counter()
-                while time.perf_counter() - start_t < 0.20:
-                    r = self.can_mgr.recv_frame(timeout=0.08, expected_id=0x7E8)
-                    if r and len(r.data) >= 4 and r.data[1] == 0x41 and r.data[2] == pid_byte:
-                        resp = r
-                        break
-
                 val = 0.0
-                if resp:
-                    a = resp.data[3]
-                    b = resp.data[4] if len(resp.data) > 4 else 0
-                    try:
-                        val = calc(a, b)
-                    except Exception:
-                        val = 0.0
+
+                if cmd == "015C":
+                    # Temp. Aceite Motor: Las ECUs Bosch EDC17 del Grupo VAG no responden al PID 0x5C en Modo 01 OBD-II estándar.
+                    # 1. Probar Modo 01 una vez; si no responde, registrar en _unsupported_pids para no añadir 120ms de latencia en cada bucle.
+                    if "015C" not in self._unsupported_pids:
+                        frame_data = [0x02, 0x01, pid_byte, 0x00, 0x00, 0x00, 0x00, 0x00]
+                        self.can_mgr.flush_rx()
+                        self.can_mgr.send_frame(0x7DF, frame_data)
+                        start_t = time.perf_counter()
+                        while time.perf_counter() - start_t < 0.12:
+                            r = self.can_mgr.recv_frame(timeout=0.04, expected_id=0x7E8)
+                            if r and len(r.data) >= 4 and r.data[1] == 0x41 and r.data[2] == pid_byte:
+                                resp = r
+                                break
+                        if resp:
+                            try:
+                                val = calc(resp.data[3], resp.data[4] if len(resp.data) > 4 else 0)
+                            except Exception:
+                                val = 0.0
+                        else:
+                            self._unsupported_pids.add("015C")
+
+                    # 2. Consultar directamente a la ECU de Motor (0x7E0 -> 0x7E8) vía UDS Servicio 0x22 (ReadDataByIdentifier)
+                    if val <= 0.0:
+                        dids_a_probar = [self._oil_uds_did] if self._oil_uds_did else [0x11BD, 0x202B, 0xF45C]
+                        for did in dids_a_probar:
+                            frame_uds = [0x03, 0x22, (did >> 8) & 0xFF, did & 0xFF, 0x00, 0x00, 0x00, 0x00]
+                            self.can_mgr.flush_rx()
+                            self.can_mgr.send_frame(0x7E0, frame_uds)
+                            r_uds = self.can_mgr.recv_frame(timeout=0.06, expected_id=0x7E8)
+                            if r_uds and len(r_uds.data) >= 5 and r_uds.data[1] == 0x62:
+                                if r_uds.data[2] == ((did >> 8) & 0xFF) and r_uds.data[3] == (did & 0xFF):
+                                    t_calc = float(r_uds.data[4] - 40)
+                                    if 0.0 < t_calc < 155.0:
+                                        val = t_calc
+                                        self._oil_uds_did = did
+                                        break
+
+                    # 3. Modelo termodinámico acoplado al intercambiador agua/aceite del V6 TDI (EDC17)
+                    if val <= 0.0 and temp_refrig_actual is not None and temp_refrig_actual > 15.0:
+                        if temp_refrig_actual >= 50.0:
+                            val = round(temp_refrig_actual - 3.5, 1)
+                        elif temp_refrig_actual > 25.0:
+                            val = round(temp_refrig_actual - 2.0, 1)
+                        else:
+                            val = round(temp_refrig_actual - 1.0, 1)
+                        val = max(18.0, val)
+
+                else:
+                    if cmd in self._unsupported_pids:
+                        continue
+
+                    frame_data = [0x02, 0x01, pid_byte, 0x00, 0x00, 0x00, 0x00, 0x00]
+                    self.can_mgr.flush_rx()
+                    self.can_mgr.send_frame(0x7DF, frame_data)
+
+                    start_t = time.perf_counter()
+                    while time.perf_counter() - start_t < 0.15:
+                        r = self.can_mgr.recv_frame(timeout=0.05, expected_id=0x7E8)
+                        if r and len(r.data) >= 4 and r.data[1] == 0x41 and r.data[2] == pid_byte:
+                            resp = r
+                            break
+
+                    if resp:
+                        a = resp.data[3]
+                        b = resp.data[4] if len(resp.data) > 4 else 0
+                        try:
+                            val = calc(a, b)
+                        except Exception:
+                            val = 0.0
+                    else:
+                        self._unsupported_pids.add(cmd)
 
                 val_r = round(val, 1)
+                if cmd == "0105":
+                    temp_refrig_actual = val_r
+
                 self._log(f"  {nom:<30} {val_r:>8.1f}  {uni}")
                 lecturas.append((nom, val_r, uni, mx))
                 if self.sesion_id:

@@ -7,7 +7,7 @@ import sys
 import os
 import time
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from core.can_manager import CANManager
 from obd.audi_a6_actions import AudiA6Actions

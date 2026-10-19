@@ -91,8 +91,11 @@ class OsciloscopioWidget(QWidget):
             canal_dest = "Caudal MAF"
 
         if canal_dest:
-            self.datos[canal_dest].append(float(valor))
-            self.ultimos_valores[canal_dest] = float(valor)
+            v_plot = float(valor)
+            if canal_dest == "Turbo / Boost" and v_plot < 10.0:
+                v_plot = v_plot * 1000.0
+            self.datos[canal_dest].append(v_plot)
+            self.ultimos_valores[canal_dest] = v_plot
             self.update()
 
     def toggle_canal(self, canal: str, activo: bool):
