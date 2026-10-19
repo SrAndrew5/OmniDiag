@@ -866,22 +866,22 @@ class KWP2000NativeClient:
         self.last_read_error = None
         errores: List[str] = []
 
-        for subfn in (0x9E, 0x9B, 0x80, 0x91):
+        for subfn in (0x9E, 0x9A, 0x9B, 0x80, 0x91):
             try:
                 resp = self.execute_service(0x1A, subfunction=subfn)
                 if not resp:
                     errores.append(f"1A {subfn:02X}: respuesta vacía")
                     continue
 
-                if subfn == 0x9E:
-                    coding = resp[1:] if (len(resp) > 1 and resp[0] == 0x9E) else resp
+                if subfn in (0x9E, 0x9A):
+                    coding = resp[1:] if (len(resp) > 1 and resp[0] == subfn) else resp
                     if len(coding) >= 1:
                         diag_logger.log_info(
-                            f"[KWP] Codificación leída vía 0x1A 0x9E ({len(coding)} bytes): {coding.hex()}"
+                            f"[KWP] Codificación leída vía 0x1A 0x{subfn:02X} ({len(coding)} bytes): {coding.hex()}"
                         )
-                        self.last_read_source = "0x1A 0x9E"
+                        self.last_read_source = f"0x1A 0x{subfn:02X}"
                         return bytes(coding)
-                    errores.append("1A 9E: respuesta sin bytes de codificación")
+                    errores.append(f"1A {subfn:02X}: respuesta sin bytes de codificación")
                     continue
 
                 if len(resp) >= 18:
