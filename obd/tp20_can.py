@@ -940,17 +940,45 @@ class KWP2000NativeClient:
 
     def write_coding(self, coding_bytes: bytes) -> bool:
         """
-        Escribe la codificación en el módulo mediante el servicio estándar oficial VAG KWP2000:
-        Service 0x3B (WriteDataByLocalIdentifier) con subfunción 0x9E (Coding).
+        Escribe la codificación en el módulo adaptándose al tipo de centralita:
+        1. Si se leyó vía UDS (0x22 DID 0x0600/0x0601), escribe con Service 0x2E (WriteDataByIdentifier).
+        2. Si es KWP2000 Long Coding, escribe con Service 0x3B subfunción 0x9A.
+        3. Si es KWP2000 estándar, escribe con Service 0x3B subfunción 0x9E.
         """
-        try:
-            resp = self.execute_service(0x3B, subfunction=0x9E, data=coding_bytes)
-            if resp is not None:
-                diag_logger.log_info(f"[KWP] Codificación escrita correctamente con Service 0x3B sub 0x9E.")
-                return True
-        except Exception as e:
-            diag_logger.log_error("Fallo escribiendo coding KWP (0x3B 0x9E)", str(e))
-            return False
+        # Si la lectura provino de UDS DID 0x0600 (como las puertas del Facelift), priorizar UDS 0x2E
+        if self.last_read_source and "0x22" in self.last_read_source:
+            did = 0x0600 if "0600" in self.last_read_source else 0x0601
+            try:
+                payload = bytes([did >> 8, did & 0xFF]) + coding_bytes
+                resp = self.execute_service(0x2E, subfunction=None, data=payload)
+                if resp is not None:
+                    diag_logger.log_info(f"[UDS-TP2.0] Codificación escrita con Service 0x2E DID 0x{did:04X}.")
+                    return True
+            except Exception as e:
+                diag_logger.log_debug(f"[UDS-TP2.0] Escritura 0x2E rechazada ({e}), probando KWP 0x3B...")
+
+        # Vías KWP2000
+        for subfn in (0x9E, 0x9A):
+            try:
+                resp = self.execute_service(0x3B, subfunction=subfn, data=coding_bytes)
+                if resp is not None:
+                    diag_logger.log_info(f"[KWP] Codificación escrita correctamente con Service 0x3B sub 0x{subfn:02X}.")
+                    return True
+            except KWPError as e:
+                diag_logger.log_debug(f"[KWP] Escritura 0x3B sub 0x{subfn:02X} rechazada: {e}")
+            except Exception as e:
+                diag_logger.log_error(f"Fallo escribiendo coding KWP (0x3B 0x{subfn:02X})", str(e))
+
+        # Fallback de seguridad: si KWP falló y no habíamos probado 0x2E, intentarlo como último recurso
+        if not (self.last_read_source and "0x22" in self.last_read_source):
+            try:
+                payload = bytes([0x06, 0x00]) + coding_bytes
+                resp = self.execute_service(0x2E, subfunction=None, data=payload)
+                if resp is not None:
+                    diag_logger.log_info("[UDS-TP2.0] Codificación escrita con Service 0x2E DID 0x0600 (fallback).")
+                    return True
+            except Exception:
+                pass
 
         return False
 
