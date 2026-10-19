@@ -21,6 +21,7 @@ from core.diagnostic_logger import diag_logger
 VAG_UDS_MODULES = {
     "Cuadro Instrumentos (17)": {"tx_id": 0x714, "rx_id": 0x77E, "nombre": "Cuadro Instrumentos / J285"},
     "Airbag (15)": {"tx_id": 0x715, "rx_id": 0x77F, "nombre": "Airbag / J234"},
+    "MMI 3G (5F)": {"tx_id": 0x770, "rx_id": 0x7DA, "nombre": "Información Electrónica / J794 (MMI 3G)"},
 }
 
 UDS_NRC_DESCRIPTIONS = {
