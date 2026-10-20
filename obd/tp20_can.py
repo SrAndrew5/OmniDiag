@@ -31,6 +31,7 @@ LOGICAL_MODULES = {
     0x01: "Motor (ECU)",
     0x02: "Transmisión",
     0x03: "ABS / ESP",
+    0x07: "Cuadro Instrumentos J285 (A6 C6 Facelift)",
     0x08: "Climatización",
     0x09: "Central Eléctrica / Luces (J519)",
     0x15: "Airbag",
@@ -669,22 +670,17 @@ class KWP2000NativeClient:
 
     def read_dtcs(self) -> List[str]:
         """
-        Lee códigos de avería almacenados.
-        Prueba en orden los servicios VAG KWP2000:
-        1. Service 0x13 (ReadDiagnosticTroubleCodesByStatus / All DTCs) -> 13 FF FF
-        2. Service 0x13 con máscara 13 FF 00
-        3. Service 0x18 sin subfunción -> 18 FF FF
-        4. Service 0x18 sub 0x02 -> 18 02 FF
+        Lee códigos de avería almacenados en la ECU.
+        Prueba únicamente los 2 servicios oficiales VAG KWP2000:
+        1. Service 0x18 sub 0x02 (ReadDtcByStatus All) -> 18 02 FF
+        2. Service 0x13 (ReadDiagnosticTroubleCodesByStatus) -> 13 FF FF
+        Si la ECU no soporta lectura de DTCs o no contesta, aborta de inmediato
+        sin colgar la sesión.
         """
         resp = None
         attempts = [
-            (0x18, None, b"\x00\xff\x00"),
-            (0x18, None, b"\x00\x00\x00"),
-            (0x18, None, b"\x00\xff"),
-            (0x13, None, b"\xff\xff"),
-            (0x13, None, b"\xff\x00"),
-            (0x18, None, b"\xff\xff"),
-            (0x18, 0x02, b"\xff"),
+            (0x18, 0x02, b"\xff"),  # Estándar oficial VAG KWP2000
+            (0x13, None, b"\xff\xff"),  # Alternativa estándar KWP
         ]
 
         for sid, subfn, data in attempts:
@@ -693,7 +689,8 @@ class KWP2000NativeClient:
                 if resp is not None and len(resp) >= 2:
                     break
             except Exception:
-                continue
+                self.transport.resync_rx()
+                break  # Si el primer intento falla, no seguir reintentando en bucle
 
         if resp is None or len(resp) < 2:
             return []
@@ -945,17 +942,32 @@ class KWP2000NativeClient:
         2. Si es KWP2000 Long Coding, escribe con Service 0x3B subfunción 0x9A.
         3. Si es KWP2000 estándar, escribe con Service 0x3B subfunción 0x9E.
         """
-        # Si la lectura provino de UDS DID 0x0600 (como las puertas del Facelift), priorizar UDS 0x2E
+        # Si la lectura provino de UDS DID 0x0600 (como las puertas del Facelift o Cuadro), priorizar UDS 0x2E
         if self.last_read_source and "0x22" in self.last_read_source:
             did = 0x0600 if "0600" in self.last_read_source else 0x0601
+            payload = bytes([did >> 8, did & 0xFF]) + coding_bytes
             try:
-                payload = bytes([did >> 8, did & 0xFF]) + coding_bytes
                 resp = self.execute_service(0x2E, subfunction=None, data=payload)
                 if resp is not None:
                     diag_logger.log_info(f"[UDS-TP2.0] Codificación escrita con Service 0x2E DID 0x{did:04X}.")
                     return True
             except Exception as e:
-                diag_logger.log_debug(f"[UDS-TP2.0] Escritura 0x2E rechazada ({e}), probando KWP 0x3B...")
+                diag_logger.log_debug(f"[UDS-TP2.0] Escritura 0x2E directa rechazada ({e}), probando Sesión de Taller 0x89 con WSC...")
+                # Reintento quirúrgico oficial VAG: Sesión de Taller 0x89 + registro de WSC (DID 0xF198)
+                try:
+                    self.execute_service(0x10, subfunction=0x89)
+                    time.sleep(0.05)
+                    wsc_def = bytes([0x0B, 0x07, 0xBC, 0x78, 0x01, 0xBD])
+                    try:
+                        self.execute_service(0x2E, data=b"\xF1\x98" + wsc_def)
+                    except Exception:
+                        pass
+                    resp_wsc = self.execute_service(0x2E, subfunction=None, data=payload)
+                    if resp_wsc is not None:
+                        diag_logger.log_info("[UDS-TP2.0] Codificación aceptada bajo Sesión 0x89 con huella WSC.")
+                        return True
+                except Exception as e2:
+                    diag_logger.log_debug(f"[UDS-TP2.0] Intento 0x89 con WSC rechazado ({e2}), probando KWP 0x3B...")
 
         # Vías KWP2000
         for subfn in (0x9E, 0x9A):

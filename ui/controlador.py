@@ -1473,11 +1473,13 @@ class MotorDiagnostico(QThread):
         coding_hex = ""
 
         if self.hardware_tipo == "CANABLE":
-            addr = TP20_MODULE_ADDR.get(modulo)
-            if addr is not None:
+            addrs = [0x07, 0x17] if modulo == "Cuadro Instrumentos (17)" else [TP20_MODULE_ADDR.get(modulo)]
+            for addr in addrs:
+                if addr is None:
+                    continue
                 try:
                     self.can_mgr.flush_rx()
-                    retries_to_use = 3 if addr in (0x08, 0x09, 0x15, 0x17, 0x46, 0x5F) else 1
+                    retries_to_use = 3 if addr in (0x07, 0x08, 0x09, 0x15, 0x17, 0x46, 0x5F) else 1
                     if self.tp20.open_channel(addr, retries=retries_to_use):
                         self.kwp.start_diagnostic_session(0x86)
                         time.sleep(0.04)
@@ -1491,10 +1493,11 @@ class MotorDiagnostico(QThread):
                                 self._log(f"[✓ OK] Codificación leída: {coding_hex} (VAG: {vag_dec:07d})")
                             else:
                                 self._log(f"[✓ OK] Long Coding leído vía TP 2.0: {coding_hex}")
+                            break
                         else:
-                            self._log(f"[WARN] {modulo} no devolvió codificación activa en TP 2.0.")
+                            self._log(f"[WARN] {modulo} (0x{addr:02X}) no devolvió codificación activa en TP 2.0.")
                 except Exception as e:
-                    self._log(f"[ERROR] Fallo al leer coding de {modulo} vía TP 2.0: {e}")
+                    self._log(f"[ERROR] Fallo al leer coding de {modulo} (0x{addr:02X}) vía TP 2.0: {e}")
                     self.tp20.close_channel()
 
             # Respaldo UDS para Cuadro 17 (0x714 / 0x77E) y módulos UDS
@@ -1621,7 +1624,7 @@ class MotorDiagnostico(QThread):
                 return
 
         if self.hardware_tipo == "CANABLE":
-            addr = TP20_MODULE_ADDR.get(modulo)
+            addr = 0x07 if modulo == "Cuadro Instrumentos (17)" else TP20_MODULE_ADDR.get(modulo)
             if addr is None:
                 self._log(f"[ERROR] Módulo '{modulo}' no tiene dirección TP 2.0 configurada.")
                 return

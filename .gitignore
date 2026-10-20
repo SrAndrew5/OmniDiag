@@ -46,6 +46,7 @@ audidiag_registro_detallado.txt.*
 
 # Documentos personales / notas privadas / diagramas html
 *.pdf
+*.html
 instrument_fuses*.html
 GUIA_ANTIGRAVITY_PORTATIL.md
 PROYECTO_CARPLAY_AUDI_A6.md
@@ -56,3 +57,10 @@ ROADMAP_FUTURAS_MEJORAS.md
 .idea/
 Thumbs.db
 Desktop.ini
+
+# Scripts de pruebas temporales e ingeniería inversa
+PRUEBAS/
+pruebas/
+scratch/
+datos/backup_cuadro_*.json
+

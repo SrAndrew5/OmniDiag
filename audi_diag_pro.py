@@ -31,6 +31,7 @@ from core.diagnostic_logger import diag_logger
 from ui.osciloscopio import OsciloscopioWidget
 from ui.dialogo_diff_backups import DialogoDiffBackups
 from ui.dialogo_gateway_list import DialogoGatewayList
+from ui.dialogo_topologia_red import DialogoTopologiaRed
 from ui.cronometro_prestaciones import CronometroPrestacionesWidget
 from ui.dialogo_ficha_dtc import DialogoFichaDTC
 from ui.dialogo_polo_kline import DialogoPoloKLine
@@ -491,6 +492,18 @@ class MainWindow(QMainWindow):
         btn.clicked.connect(self.iniciar_conexion)
         lyt.addWidget(btn)
 
+        # ── Botón de Topología y Revisión de Red ──
+        btn_topologia = QPushButton("🌐   REVISIÓN DE RED CAN — TOPOLOGÍA Y ESTADO DE TODOS LOS MÓDULOS")
+        btn_topologia.setProperty("class", "btn-secundario")
+        btn_topologia.setFixedHeight(44)
+        btn_topologia.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_topologia.setToolTip(
+            "Verifica la conexión con todas las centralitas, su presencia en el Gateway J533, "
+            "referencia de hardware oficial y Long Coding."
+        )
+        btn_topologia.clicked.connect(self.abrir_dialogo_topologia_red)
+        lyt.addWidget(btn_topologia)
+
         lyt.addStretch()
         self.stack.addWidget(page)
 
@@ -521,6 +534,13 @@ class MainWindow(QMainWindow):
         btn_auto.setFixedHeight(40)
         btn_auto.clicked.connect(self.auto_scan)
         fila.addWidget(btn_auto)
+
+        btn_topologia_dtc = QPushButton("🌐  Topología Red")
+        btn_topologia_dtc.setProperty("class", "btn-secundario")
+        btn_topologia_dtc.setFixedHeight(40)
+        btn_topologia_dtc.setToolTip("Revisa el estado de conexión de todas las centralitas en el bus CAN y su Long Coding.")
+        btn_topologia_dtc.clicked.connect(self.abrir_dialogo_topologia_red)
+        fila.addWidget(btn_topologia_dtc)
 
         btn_borrar = QPushButton("🗑  Borrar Fallos")
         btn_borrar.setProperty("class", "btn-peligro")
@@ -1922,6 +1942,12 @@ class MainWindow(QMainWindow):
         dlg.lista_guardada_signal.connect(lambda activos: self.worker.ejecutar("gateway_guardar_lista", modulos=activos))
         dlg.exec()
 
+    def abrir_dialogo_topologia_red(self):
+        """Abre la ventana de revisión de conexión y topología de red CAN de todos los módulos."""
+        can_mgr = getattr(self.worker, "can_mgr", None)
+        dlg = DialogoTopologiaRed(self, can_mgr=can_mgr)
+        dlg.exec()
+
     def abrir_archivo_log(self):
         """Abre el archivo de registro audidiag_registro_detallado.txt en el Bloc de Notas de Windows."""
         ruta = config.LOG_FILE_PATH
@@ -3260,46 +3286,39 @@ class MainWindow(QMainWindow):
             self.escribir_consola("[CSV] Grabación detenida.")
 
     def activar_needle_sweep_rapido(self):
-        """Activa el test de agujas (Needle Sweep) en el Cuadro 17 en 1 solo clic con backup."""
+        """Activa el test de agujas (Needle Sweep) y Lap Timer en el Cuadro J285 en 1 solo clic."""
         if QMessageBox.question(
-            self, "Activar Needle Sweep",
-            "¿Deseas activar el test/barrido de agujas al arrancar en tu Audi A6 C6?\n\n"
-            "El sistema realizará automáticamente:\n"
-            "1. Conexión nativa TP 2.0 con el Cuadro (17)\n"
-            "2. Copia de seguridad automática de la codificación original\n"
-            "3. Activación de Byte 1, Bit 0 con login de seguridad 13861\n"
-            "4. Verificación inmediata de escritura",
+            self, "🚀 Activar Needle Sweep + Lap Timer",
+            "¿Deseas activar el test/barrido de agujas al arrancar y el cronómetro FIS en tu Audi A6 C6?\n\n"
+            "El sistema realizará el protocolo quirúrgico verificado VAG:\n"
+            "1. Conexión nativa TP 2.0 con el Cuadro J285 (0x07 / 0x17)\n"
+            "2. Copia de seguridad obligatoria previa a disco\n"
+            "3. Sesión de Taller VAG (0x89) con inyección de huella WSC oficial (DID F198)\n"
+            "4. Modificación quirúrgica del Byte 1 (0x5F: +Needle Sweep +Lap Timer)\n"
+            "5. Verificación inmediata byte a byte en memoria EEPROM",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         ) == QMessageBox.StandardButton.Yes:
-            self.escribir_consola("\n[ACCION] Iniciando activación de Needle Sweep...")
+            self.escribir_consola("\n[ACCION] Iniciando activación quirúrgica de Needle Sweep + Lap Timer...")
             self.combo_coding.setCurrentText("Cuadro Instrumentos (17)")
             self.worker.set_accion("activar_needle_sweep")
             self.worker.start()
 
     def activar_plegado_retrovisores_rapido(self):
-        """
-        Codifica los Módulos 46 + 42 + 52 para activar el plegado automático
-        de retrovisores al cerrar/abrir el coche con el mando. 1 solo clic.
-        """
-        resp = QMessageBox.question(
-            self, "🪞 Plegado Automático de Retrovisores",
-            "¿Deseas activar el plegado automático de retrovisores al usar el mando?\n\n"
-            "El sistema codificará automáticamente:\n"
-            "  • Módulo 46 (Confort J393) → habilita lógica de plegado\n"
-            "  • Módulo 42 (Puerta Conductor J386) → declara motor de plegado\n"
-            "  • Módulo 52 (Puerta Copiloto J387) → declara motor de plegado\n\n"
-            "⚠ Requisito: Los retrovisores deben tener motor de plegado físico\n"
-            "(verificado si se pliegan con la rueda de la puerta).\n\n"
-            "Se creará backup automático antes de cualquier escritura.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        """Informa sobre el estado del plegado automático de retrovisores en el Audi A6 C6."""
+        QMessageBox.information(
+            self, "🪞 Plegado de Retrovisores — Audi A6 C6 (4F)",
+            "INFORMACIÓN TÉCNICA VAG OFICIAL:\n\n"
+            "En la plataforma Audi A6 C6 (2004–2011), las centralitas de confort (J393) y puertas "
+            "(J386/J387) NO disponen en su firmware de fábrica de la rutina para plegar espejos desde "
+            "el mando a distancia.\n\n"
+            "• Los espejos abaten correctamente mediante el mando giratorio de la puerta.\n"
+            "• Para conseguir el plegado automático al cerrar con el mando en un A6 C6, la solución "
+            "estándar probada es un módulo CAN confort plug&play (~25€) intercalado en la puerta del conductor."
         )
-        if resp == QMessageBox.StandardButton.Yes:
-            self.escribir_consola(
-                "\n[ACCION] Iniciando codificación de plegado automático de retrovisores...\n"
-                "  → Conectando a Módulo 46 (Confort), 42 (Puerta conductor), 52 (Puerta copiloto)"
-            )
-            self.worker.set_accion("activar_plegado_retrovisores")
-            self.worker.start()
+        self.escribir_consola(
+            "\n[INFO RETROVISORES] En el Audi A6 C6 el abatimiento desde mando no existe en el microcódigo "
+            "de fábrica de la centralita confort. Para plegado automático con mando se requiere el módulo CAN plug&play."
+        )
 
     def leer_coding(self):
         self.worker.set_accion("leer_coding", modulo=self.combo_coding.currentText())
