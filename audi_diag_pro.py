@@ -35,6 +35,7 @@ from ui.dialogo_topologia_red import DialogoTopologiaRed
 from ui.cronometro_prestaciones import CronometroPrestacionesWidget
 from ui.dialogo_ficha_dtc import DialogoFichaDTC
 from ui.dialogo_polo_kline import DialogoPoloKLine
+from ui.dialogo_menu_verde_sd import DialogoMenuVerdeSD
 import webbrowser
 
 
@@ -1214,7 +1215,7 @@ class MainWindow(QMainWindow):
         lyt_swirl.addStretch()
         tabs_maint.addTab(tab_swirl, "🌪  Chapaletas V157 (01)")
 
-        # ── TAB 10: MENÚ VERDE MMI (07) ──
+        # ── TAB 10: MENÚ VERDE MMI (GEM / SD FAT32) ──
         tab_mmi = QWidget()
         lyt_mmi = QVBoxLayout(tab_mmi)
         lyt_mmi.setContentsMargins(20, 20, 20, 20)
@@ -1227,34 +1228,52 @@ class MainWindow(QMainWindow):
         mm_lyt.setSpacing(12)
 
         lbl_mmi_desc = QLabel(
-            "<b>Habilitar Menú Verde Oculto de Ingeniería (Módulo 07 — MMI 2G High / MMI 3G):</b><br>"
-            "Modifica el Canal de Adaptación 08 a valor 1 para desbloquear el menú de desarrollo de Audi en la pantalla central. "
-            "Desde él se pueden habilitar indicadores auxiliares de batería, cronómetro de vueltas y funciones de confort."
+            "<b>Activación Menú Verde (Green Engineering Menu - GEM) — MMI 3G / 2G:</b><br>"
+            "ℹ️ <b>Aviso de Arquitectura VAG (Audi A6 C6 4F Facelift):</b> En las unidades MMI 3G Basic y High "
+            "(4E0035654 / BNav_EU / HNav_EU), Audi <b>bloqueó por completo la adaptación por OBD (Canal 06)</b> "
+            "arrojando el código de rechazo <i>NRC 0x31 RequestOutOfRange</i>.<br>"
+            "Esta función <b>NO va por Long Coding</b> ni por diagnosis en el A6 C6. "
+            "El método oficial y 100% infalible es mediante la inyección directa con <b>Tarjeta SD en formato FAT32</b>."
         )
         lbl_mmi_desc.setStyleSheet("color: #CBD5E1; font-size: 13px; line-height: 1.4;")
         lbl_mmi_desc.setWordWrap(True)
         mm_lyt.addWidget(lbl_mmi_desc)
 
         lbl_mmi_how = QLabel(
-            "<b>Cómo acceder una vez activado:</b><br>"
-            "En la consola central del coche, pulsa simultáneamente y mantén presionados los botones <b>CAR + SETUP</b> durante 5 segundos."
+            "<b>Instrucciones de uso en el vehículo:</b><br>"
+            "1. Poner contacto y <b>esperar 2 minutos</b> a que el sistema operativo QNX inicie por completo.<br>"
+            "2. Introducir la tarjeta SD en la <b>Ranura 1 (SD 1)</b> del lector en la guantera.<br>"
+            "3. Esperar confirmación en pantalla ('Green Menu Enabled'), sacar la SD y reiniciar MMI (SETUP + Ruleta + Superior Der).<br>"
+            "4. <b>Acceso:</b> Mantener pulsado primero <b>SETUP</b> y después <b>CAR</b> a la vez durante 6 segundos."
         )
-        lbl_mmi_how.setStyleSheet("color: #00FF88; font-size: 12px; background: #0E291B; padding: 10px; border-radius: 6px;")
+        lbl_mmi_how.setStyleSheet("color: #38BDF8; font-size: 12px; background: #0F172A; border-left: 3px solid #38BDF8; padding: 12px; border-radius: 6px; line-height: 1.4;")
+        lbl_mmi_how.setWordWrap(True)
         mm_lyt.addWidget(lbl_mmi_how)
 
-        self.lbl_mmi_status = QLabel("Estado: Menú de ingeniería listo para ser habilitado.")
+        self.lbl_mmi_status = QLabel("Estado: Listo para preparar Tarjeta SD o verificar por OBD.")
         self.lbl_mmi_status.setStyleSheet("color: #94A3B8; font-weight: 800; font-size: 12.5px;")
         mm_lyt.addWidget(self.lbl_mmi_status)
 
-        btn_mmi = QPushButton("🟢  Activar Menú Verde Oculto en MMI")
-        btn_mmi.setProperty("class", "btn-accion")
-        btn_mmi.setFixedHeight(44)
-        btn_mmi.clicked.connect(lambda: self.worker.ejecutar("mmi_green_menu"))
-        mm_lyt.addWidget(btn_mmi)
+        fila_mmi_btns = QHBoxLayout()
+        fila_mmi_btns.setSpacing(12)
+
+        btn_asistente_sd = QPushButton("⚡  ABRIR ASISTENTE TARJETA SD (FORMATEAR FAT32 Y GRABAR)")
+        btn_asistente_sd.setProperty("class", "btn-peligro")
+        btn_asistente_sd.setFixedHeight(46)
+        btn_asistente_sd.clicked.connect(self.abrir_dialogo_menu_verde_sd)
+        fila_mmi_btns.addWidget(btn_asistente_sd, stretch=2)
+
+        btn_mmi_obd = QPushButton("🔍  Probar Vía OBD (MMI 2G / Otros VAG)")
+        btn_mmi_obd.setProperty("class", "btn-secundario")
+        btn_mmi_obd.setFixedHeight(46)
+        btn_mmi_obd.clicked.connect(lambda: self.worker.ejecutar("mmi_green_menu"))
+        fila_mmi_btns.addWidget(btn_mmi_obd, stretch=1)
+
+        mm_lyt.addLayout(fila_mmi_btns)
 
         lyt_mmi.addWidget(card_mmi)
         lyt_mmi.addStretch()
-        tabs_maint.addTab(tab_mmi, "🟢  Menú Verde MMI (07)")
+        tabs_maint.addTab(tab_mmi, "🟢  Menú Verde MMI (GEM / SD)")
 
         lyt.addWidget(tabs_maint, stretch=1)
         self.stack.addWidget(page)
@@ -1351,6 +1370,13 @@ class MainWindow(QMainWindow):
         self.btn_gw.setToolTip("Editar qué centralitas y accesorios están instalados en la pasarela Gateway J533")
         self.btn_gw.clicked.connect(self.abrir_dialogo_gateway_list)
         fila_actions.addWidget(self.btn_gw)
+
+        btn_gem_wizard = QPushButton("🟢  Menú Verde (SD FAT32)")
+        btn_gem_wizard.setProperty("class", "btn-secundario")
+        btn_gem_wizard.setFixedHeight(38)
+        btn_gem_wizard.setToolTip("En Audi A6 C6 (4F), el Menú Verde NO va por Long Coding. Abre el asistente oficial de Tarjeta SD FAT32.")
+        btn_gem_wizard.clicked.connect(self.abrir_dialogo_menu_verde_sd)
+        fila_actions.addWidget(btn_gem_wizard)
 
         fila_actions.addStretch()
         lyt.addLayout(fila_actions)
@@ -1946,6 +1972,12 @@ class MainWindow(QMainWindow):
         """Abre la ventana de revisión de conexión y topología de red CAN de todos los módulos."""
         can_mgr = getattr(self.worker, "can_mgr", None)
         dlg = DialogoTopologiaRed(self, can_mgr=can_mgr)
+        dlg.exec()
+
+    def abrir_dialogo_menu_verde_sd(self):
+        """Abre el asistente oficial para formatear en FAT32 y grabar la SD de activación del Menú Verde."""
+        can_mgr = getattr(self.worker, "can_mgr", None)
+        dlg = DialogoMenuVerdeSD(self, conexion=can_mgr)
         dlg.exec()
 
     def abrir_archivo_log(self):

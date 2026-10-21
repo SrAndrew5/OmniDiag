@@ -873,44 +873,100 @@ class VAGServiceWizards:
     # ──────────────────────────────────────────────────────────────────────────
     def mmi_activar_green_menu(self, simulado: bool = False) -> Tuple[bool, str]:
         """
-        Activa el Menú Verde Oculto de Ingeniería (Green Menu) en MMI 2G High / MMI 3G
-        escribiendo valor 1 en el Canal de Adaptación 08 del Módulo 07 (Control Head).
+        Activa o sondea el Menú Verde Oculto de Ingeniería (Green Menu) vía OBD.
+        Soporta MMI 2G (Módulo 07, Canal 08) y sondea MMI 3G (Módulos 5F/4D, Canal 06).
+        Si detecta un MMI 3G en plataforma A6 C6 (bloqueo oficial NRC 0x31),
+        informa de inmediato sin colgarse y redirige al Asistente de Tarjeta SD FAT32.
         """
-        self._emit("\n[MMI] ====== ACTIVACIÓN DE MENÚ VERDE DE INGENIERÍA (GREEN MENU) ======")
-        self._emit("[MMI] Módulo objetivo: Control Head MMI (07)")
+        self._emit("\n[MMI] ====== COMPROBACIÓN / ACTIVACIÓN OBD MENÚ VERDE ======")
 
         if simulado:
             time.sleep(1.0)
-            self._emit("[MMI SIMULADO] Abriendo canal TP 2.0 con Módulo 07 (Control Head)...")
+            self._emit("[MMI SIMULADO] Sondeando centralitas de información (0x07 / 0x5F / 0x4D)...")
             time.sleep(0.8)
-            self._emit("[MMI SIMULADO] Leyendo Canal de Adaptación 08: valor actual = 0 (Desactivado)")
-            time.sleep(0.8)
-            self._emit("[MMI SIMULADO] Grabando Canal 08 = 1 (Activado)...")
-            time.sleep(1.0)
-            msg = "Menú Verde de Ingeniería activado con éxito. Para abrirlo en la pantalla, mantén pulsados CAR + SETUP durante 5 segundos."
-            self._emit(f"[MMI SIMULADO] [OK] {msg}")
-            return True, msg
+            msg = (
+                "Aviso de Arquitectura VAG: En Audi A6 C6 (4F) con MMI 3G, la activación por OBD está bloqueada "
+                "por firmware (NRC 0x31). Utiliza el Asistente de Tarjeta SD FAT32 incluido en la app."
+            )
+            self._emit(f"[MMI SIMULADO] [INFO] {msg}")
+            return False, msg
 
         try:
             self.can.flush_rx()
-            if not self.tp20.open_channel(0x07, retries=2):
-                return False, "No se pudo conectar con el Módulo MMI (07)."
 
-            self.kwp.start_diagnostic_session(0x86)
-            time.sleep(0.05)
+            # 1. Intentar primero MMI 2G (Módulo 07 - Control Head antiguo)
+            self._emit("[MMI OBD] Sondeando Control Head MMI 2G (Dirección 0x07)...")
+            mmi2g_ok = False
+            try:
+                if self.tp20.open_channel(0x07, retries=1):
+                    self.kwp.start_diagnostic_session(0x86)
+                    time.sleep(0.05)
+                    self._emit("[MMI 2G] Grabando valor 1 en Canal 08 de Adaptación...")
+                    resp = self.kwp.execute_service(0x3B, subfunction=0x08, data=b'\x00\x01')
+                    self.tp20.close_channel()
+                    if resp and resp[0] == 0x7B:
+                        msg = "Menú Verde MMI 2G activado correctamente vía OBD (Canal 08). Mantén pulsados CAR + SETUP durante 5 segundos."
+                        self._emit(f"[MMI 2G] [OK] {msg}")
+                        return True, msg
+                    mmi2g_ok = True
+            except Exception:
+                pass
+            finally:
+                try:
+                    self.tp20.close_channel()
+                except Exception:
+                    pass
 
-            # Escribir 1 en Canal 08 de Adaptación
-            self._emit("[MMI] Grabando valor 1 en Canal 08 de Adaptación...")
-            resp = self.kwp.execute_service(0x3B, subfunction=0x08, data=b'\x00\x01')
+            # 2. Si no es MMI 2G, sondear MMI 3G (Dirección 0x5F o 0x4D)
+            self._emit("[MMI OBD] Sondeando Módulo de Información MMI 3G (Dirección 0x5F / 0x4D)...")
+            for mmi_addr in [0x5F, 0x4D]:
+                try:
+                    self.can.flush_rx()
+                    if self.tp20.open_channel(mmi_addr, retries=1):
+                        self._emit(f"[MMI 3G] Conectado a MMI 3G (0x{mmi_addr:02X}). Probando Canal 06 de adaptación...")
+                        self.kwp.start_diagnostic_session(0x86)
+                        time.sleep(0.05)
+                        resp = self.kwp.execute_service(0x3B, subfunction=0x06, data=b'\x00\x01')
+                        self.tp20.close_channel()
 
-            self.tp20.close_channel()
-            msg = "Menú Verde activado correctamente. En el habitáculo mantén pulsados CAR + SETUP simultáneamente durante 5 segundos para acceder."
-            self._emit(f"[MMI] [OK] {msg}")
-            return True, msg
+                        # En MMI 3G Basic/High de A6 C6, responde 0x7F 0x3B 0x31 (NRC 0x31 RequestOutOfRange)
+                        if resp and resp[0] == 0x7F and len(resp) >= 3 and resp[2] == 0x31:
+                            err_mmi3g = (
+                                "BLOQUEO DE FÁBRICA AUDI DETECTADO (NRC 0x31 RequestOutOfRange):\n\n"
+                                "En el Audi A6 C6 (4F) con MMI 3G, Audi eliminó el acceso al Canal 06 por OBD.\n"
+                                "Esta función NO va por Long Coding ni por diagnóstico.\n\n"
+                                "👉 Solución Oficial: Utiliza el botón 'Asistente Tarjeta SD' para grabarlo en FAT32."
+                            )
+                            self._emit(f"[MMI 3G] [BLOQUEO OBD] {err_mmi3g}")
+                            return False, err_mmi3g
+                        elif resp and resp[0] == 0x7B:
+                            msg = "Menú Verde activado por OBD (Canal 06). Mantén pulsados SETUP + CAR durante 5 segundos."
+                            self._emit(f"[MMI 3G] [OK] {msg}")
+                            return True, msg
+                except Exception:
+                    pass
+                finally:
+                    try:
+                        self.tp20.close_channel()
+                    except Exception:
+                        pass
+
+            # Si ninguna centralita responde por OBD:
+            info_c6 = (
+                "Aviso de Arquitectura Audi A6 C6 Facelift:\n"
+                "El MMI 3G no permite la activación por OBD/Long Coding (bloqueo oficial NRC 0x31).\n"
+                "Usa el botón 'Asistente Tarjeta SD (FAT32)' para activarlo en 2 minutos mediante SD."
+            )
+            self._emit(f"[MMI] [INFO] {info_c6}")
+            return False, info_c6
+
         except Exception as e:
-            self.tp20.close_channel()
-            err = f"Error al activar Menú Verde MMI: {e}"
-            self._emit(f"[MMI] ✗ {err}")
+            try:
+                self.tp20.close_channel()
+            except Exception:
+                pass
+            err = f"Aviso MMI: {e}. Se recomienda usar el Asistente de Tarjeta SD."
+            self._emit(f"[MMI] {err}")
             return False, err
 
     # ──────────────────────────────────────────────────────────────────────────
