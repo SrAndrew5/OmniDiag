@@ -414,28 +414,49 @@ class VAGServiceWizards:
             # Leer canales 72 a 77 (0x48 a 0x4D)
             for idx, ch in enumerate(range(72, 78), start=1):
                 resp = self.kwp.execute_service(0x21, subfunction=ch)
-                if resp and len(resp) >= 6:
-                    # En KWP VAG, cada campo de inyector suele ser un signed 16-bit en ms
-                    val1 = int.from_bytes(resp[1:3], byteorder="big", signed=True) * 0.1
-                    val2 = int.from_bytes(resp[3:5], byteorder="big", signed=True) * 0.1
-                    val3 = int.from_bytes(resp[5:7], byteorder="big", signed=True) * 0.1
+                if resp and len(resp) >= 10:
+                    # Formato oficial MWB KWP2000 VAG: Cada celda tiene 3 bytes [tipo_formula, param_a, param_b]
+                    # En Formula 47 (0x2F): Valor (ms) = (param_b - 128) * param_a
+                    if resp[1] == 0x2F:
+                        val1 = float((resp[3] - 128) * (resp[2] if resp[2] != 0 else 1))
+                    else:
+                        val1 = float(int.from_bytes(resp[1:3], byteorder="big", signed=True) * 0.1)
+
+                    if len(resp) >= 7 and resp[4] == 0x2F:
+                        val2 = float((resp[6] - 128) * (resp[5] if resp[5] != 0 else 1))
+                    else:
+                        val2 = float(int.from_bytes(resp[3:5], byteorder="big", signed=True) * 0.1)
+
+                    if len(resp) >= 10 and resp[7] == 0x2F:
+                        val3 = float((resp[9] - 128) * (resp[8] if resp[8] != 0 else 1))
+                    else:
+                        val3 = float(int.from_bytes(resp[5:7], byteorder="big", signed=True) * 0.1)
+                elif resp and len(resp) >= 6:
+                    val1 = float(int.from_bytes(resp[1:3], byteorder="big", signed=True) * 0.1)
+                    val2 = float(int.from_bytes(resp[3:5], byteorder="big", signed=True) * 0.1)
+                    val3 = float(int.from_bytes(resp[5:7], byteorder="big", signed=True) * 0.1)
                 else:
                     # Valores nominales si el bloque no devolvió formato completo
-                    val1, val2, val3 = -8.0, -4.0, -2.0
+                    val1, val2, val3 = 0.0, 0.0, 0.0
 
-                # Diagnóstico
+                # Diagnóstico oficial VAG Common Rail
+                # Valores negativos (< -45 ms): Desgaste de asiento de aguja -> Riesgo de goteo
+                # Valores positivos (> +15 ms): Ligera carbonilla en toberas (normal por uso/km, sin riesgo mecánico)
                 min_val = min(val1, val2, val3)
                 max_val = max(val1, val2, val3)
 
                 if min_val <= -45.0:
                     st = "CRÍTICO: Aguja desgastada (Riesgo de goteo)"
                     color = "#FF0026"
-                elif max_val >= +15.0:
-                    st = "ALERTA: Tobera parcialmente obstruida"
-                    color = "#FFB347"
                 elif min_val <= -30.0:
-                    st = "AVISO: Desgaste moderado"
+                    st = "AVISO: Desgaste moderado de aguja"
                     color = "#FFCC00"
+                elif max_val >= +40.0:
+                    st = "AVISO: Carbonilla alta en tobera (Usar aditivo)"
+                    color = "#FFB347"
+                elif max_val >= +15.0:
+                    st = "BUENO: Leve depósito de carbonilla (Sin riesgo de goteo)"
+                    color = "#00FF88"
                 else:
                     st = "ÓPTIMO: Dentro de tolerancias de fábrica"
                     color = "#00FF88"

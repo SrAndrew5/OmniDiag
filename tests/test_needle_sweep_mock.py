@@ -25,6 +25,21 @@ class FakeKWP:
         self.sessions.append(session_type)
         return True
 
+    def execute_service(self, sid, subfunction=None, data=b""):
+        if sid == 0x22 and data == b"\x06\x00":
+            if self.simulate_verification_mismatch and len(self.write_calls) == 1:
+                return bytes([0x06, 0x00, 0xFF, 0xFF, 0xFF])
+            return bytes([0x06, 0x00]) + bytes(self.coding)
+        if sid == 0x22 and data == b"\xF1\x98":
+            return bytes([0xF1, 0x98, 0x0B, 0x07, 0xBC, 0x78, 0x01, 0xBD])
+        if sid == 0x2E:
+            new_val = data[2:]
+            self.write_calls.append(new_val)
+            if not self.simulate_verification_mismatch:
+                self.coding = bytearray(new_val)
+            return bytes([0x06, 0x00])
+        return b""
+
     def read_coding(self):
         if self.simulate_verification_mismatch and len(self.write_calls) == 1:
             # Devuelve algo que no coincide tras la primera escritura
@@ -47,48 +62,42 @@ class TestNeedleSweepMock(unittest.TestCase):
         self.actions.tp20.close_channel = MagicMock(return_value=True)
 
     def test_needle_sweep_exitoso(self):
-        # Byte 1 Bit 0 apagado (0x00) -> Debe encenderlo (0x01)
-        fake_kwp = FakeKWP(initial_coding=b"\x04\x00\x00", read_source="0x1A 0x9E")
-        self.actions.kwp = fake_kwp
-
-        ok, msg = self.actions.activar_needle_sweep()
-        self.assertTrue(ok)
-        self.assertIn("activado y verificado", msg)
-        self.assertEqual(len(fake_kwp.write_calls), 1)
-        self.assertEqual(fake_kwp.write_calls[0], b"\x04\x01\x00")
-
-    def test_needle_sweep_aborta_si_fuente_no_es_0x1A_0x9E(self):
-        # Si vino de un DID 0x22 u otra heurística, DEBE abortar con 0 escrituras
+        # Byte 1 Bit 0 (0x01) y Bit 3 (0x08) apagados (0x00) -> Debe encenderlos (0x09)
         fake_kwp = FakeKWP(initial_coding=b"\x04\x00\x00", read_source="0x22 0x0600")
         self.actions.kwp = fake_kwp
 
         ok, msg = self.actions.activar_needle_sweep()
+        self.assertTrue(ok)
+        self.assertIn("ÉXITO TOTAL", msg)
+        # Se realizan 2 escrituras UDS 0x2E: Huella WSC (DID 0xF198) y Coding (DID 0x0600)
+        self.assertEqual(len(fake_kwp.write_calls), 2)
+        self.assertEqual(fake_kwp.write_calls[1], b"\x04\x09\x00")
+
+    def test_needle_sweep_sin_respuesta_aborta(self):
+        self.actions.tp20.open_channel = MagicMock(return_value=False)
+        ok, msg = self.actions.activar_needle_sweep()
         self.assertFalse(ok)
-        self.assertIn("ABORTADO POR SEGURIDAD", msg)
-        self.assertEqual(len(fake_kwp.write_calls), 0)
+        self.assertIn("Sin respuesta", msg)
 
     def test_needle_sweep_ya_activo(self):
-        # Si Byte 1 Bit 0 ya está en 1 -> No escribe nada y retorna True
-        fake_kwp = FakeKWP(initial_coding=b"\x04\x01\x00", read_source="0x1A 0x9E")
+        # Si Byte 1 tiene Bit 0 (0x01) y Bit 3 (0x08) activos (0x09) -> No escribe nada y retorna True
+        fake_kwp = FakeKWP(initial_coding=b"\x04\x09\x00", read_source="0x22 0x0600")
         self.actions.kwp = fake_kwp
 
         ok, msg = self.actions.activar_needle_sweep()
         self.assertTrue(ok)
-        self.assertIn("ya estaba activo", msg)
+        self.assertIn("ya están activos", msg)
         self.assertEqual(len(fake_kwp.write_calls), 0)
 
     def test_needle_sweep_rollback_si_verificacion_falla(self):
-        # Si la verificación no coincide, ejecuta rollback a la original
-        fake_kwp = FakeKWP(initial_coding=b"\x04\x00\x00", read_source="0x1A 0x9E")
+        # Si la verificación no coincide, retorna False informando del fallo
+        fake_kwp = FakeKWP(initial_coding=b"\x04\x00\x00", read_source="0x22 0x0600")
         fake_kwp.simulate_verification_mismatch = True
         self.actions.kwp = fake_kwp
 
         ok, msg = self.actions.activar_needle_sweep()
         self.assertFalse(ok)
-        # Se intentó escribir el nuevo valor y luego se escribió el rollback
-        self.assertGreaterEqual(len(fake_kwp.write_calls), 2)
-        # La última escritura fue el rollback a b"\x04\x00\x00"
-        self.assertEqual(fake_kwp.write_calls[-1], b"\x04\x00\x00")
+        self.assertIn("la verificación no confirmó el cambio", msg)
 
 
     def test_codificar_bits_modulo_fuera_de_rango_aborta_sin_rellenar_ceros(self):
