@@ -386,6 +386,7 @@ class MotorDiagnostico(QThread):
                 "inyectores_leer":     self._inyectores_leer,
                 "bateria_codificar":   self._bateria_codificar,
                 "bateria_leer":        self._bateria_leer,
+                "test_bateria_arranque": self._test_bateria_arranque,
                 "abs_purga":           self._abs_purga,
                 "caja_atf":            self._caja_atf,
                 "caja_reset":          self._caja_reset,
@@ -512,6 +513,15 @@ class MotorDiagnostico(QThread):
             self.hardware_tipo = "CANABLE"
             interfaz = self.can_mgr.connected_interface
             self._log(f"[✓ ÉXITO] Conexión nativa establecida vía {interfaz} a 500 kbps.")
+
+            # Auto-detección inteligente: si el usuario dejó modo VAG pero conectó un Opel (VIN W0L...)
+            if modo_vehiculo == "VAG":
+                vin_detectado = self.universal_obd.leer_vin()
+                if vin_detectado and vin_detectado.startswith("W0L"):
+                    self._log(f"[AUTO-DETECCIÓN] ¡Detectado vehículo Opel (VIN: {vin_detectado})!")
+                    self._log("  ▸ Cambiando automáticamente a Modo Opel Corsa / Universal OBD-II.")
+                    config.VEHICLE_MODE = "OBD2_UNIVERSAL"
+                    modo_vehiculo = "OBD2_UNIVERSAL"
 
             if modo_vehiculo == "OBD2_UNIVERSAL":
                 self._log("  ▸ Protocolo de bus: ISO 15765-4 (CAN 11-bit 500k) — Opel Corsa / Multimarca.")
@@ -903,9 +913,9 @@ class MotorDiagnostico(QThread):
                 "Airbag / SRS": [],
             }
             fallos = fallos_sim.get(modulo, fallos_sim.get("Motor / ECM", []))
-            mil_on = True if ("Motor" in modulo or "0x7E0" in modulo or "0x7E8" in modulo or "Universal" in modulo) else False
+            mil_on = True if ("Motor" in modulo or "0x7E0" in modulo or "0x7E8" in modulo or "Universal" in modulo or "OBD" in modulo or "Todos" in modulo) else False
         else:
-            if "Motor" in modulo or "0x7E0" in modulo or "0x7E8" in modulo or "Universal" in modulo:
+            if "Motor" in modulo or "0x7E0" in modulo or "0x7E8" in modulo or "Universal" in modulo or "OBD" in modulo or "Todos" in modulo:
                 raw_fallos = self.universal_obd.leer_fallos_dtc()
                 for cod, desc, est, mod in raw_fallos:
                     fallos.append((f"{cod} [{est}]", desc, {}))
@@ -2164,6 +2174,144 @@ class MotorDiagnostico(QThread):
         sim = (self.hardware_tipo == "SIMULADO")
         ok, msg, info = self.wizards.bateria_leer(simulado=sim)
         self.wizard_data_signal.emit("bateria_leida", {"ok": ok, "msg": msg, "info": info})
+
+    def _test_bateria_arranque(self):
+        duracion = float(self.kwargs.get("duracion", 8.0))
+        escenario_sim = self.kwargs.get("escenario_sim", "auto")
+        self._log("\n[TEST BATERÍA] ══════ ANÁLISIS DE ARRANQUE Y SISTEMA DE CARGA ══════")
+        self._log("  ▸ Grabando telemetría de bus a alta velocidad durante la maniobra...")
+        muestras = []
+        rpm_final = 0.0
+
+        if self.hardware_tipo in ("SIMULADO", "SIMULADO_KLINE") or not self.can_mgr.is_connected:
+            modo_v = getattr(config, "VEHICLE_MODE", "VAG")
+            if escenario_sim == "bateria_muerta" or (escenario_sim == "auto" and modo_v in ("OBD2_UNIVERSAL", "OPEL_CONFORT")):
+                # Simular caso real Opel Corsa D (celda muerta 6V)
+                t_arranque = 2.0
+                t_fin_arranque = 4.2
+                total_steps = int(duracion * 20)
+                for step in range(total_steps):
+                    t = round(step * 0.05, 2)
+                    if t < t_arranque:
+                        v = round(12.95 + (step % 3)*0.01, 2)
+                    elif t <= t_fin_arranque:
+                        v = round(6.01 + (t - t_arranque)*0.65, 2)
+                    else:
+                        v = round(10.27 - (step % 2)*0.02, 2)
+                    muestras.append((t, v))
+                    time.sleep(0.03)
+                rpm_final = 0.0
+            elif escenario_sim == "starter_fail":
+                # Simular fallo en relé de arranque (cero caída)
+                total_steps = int(duracion * 20)
+                for step in range(total_steps):
+                    t = round(step * 0.05, 2)
+                    v = 12.60
+                    muestras.append((t, v))
+                    time.sleep(0.03)
+                rpm_final = 0.0
+            else:
+                # Simular batería saludable (Audi / Polo / Corsa OK)
+                t_arranque = 2.0
+                t_arranco = 3.6
+                total_steps = int(duracion * 20)
+                for step in range(total_steps):
+                    t = round(step * 0.05, 2)
+                    if t < t_arranque:
+                        v = round(12.55 + (step % 2)*0.01, 2)
+                    elif t <= t_arranco:
+                        v = round(10.45 - (t - t_arranque)*0.25, 2)
+                    else:
+                        v = round(14.45 + (step % 3)*0.02, 2)
+                    muestras.append((t, v))
+                    time.sleep(0.03)
+                rpm_final = 820.0
+        else:
+            # Conexión Real CANable / K-Line
+            t_inicio = time.time()
+            while time.time() - t_inicio < duracion:
+                self.can_mgr.flush_rx()
+                self.can_mgr.send_frame(0x7DF, [0x02, 0x01, 0x42, 0, 0, 0, 0, 0])
+                r = self.can_mgr.recv_frame(timeout=0.06, expected_id=0x7E8)
+                if r and len(r.data) >= 5 and r.data[1] == 0x41 and r.data[2] == 0x42:
+                    v = ((r.data[3] * 256) + r.data[4]) / 1000.0
+                    t_rel = round(time.time() - t_inicio, 2)
+                    muestras.append((t_rel, v))
+                time.sleep(0.015)
+
+            # Comprobar RPM al final
+            self.can_mgr.flush_rx()
+            self.can_mgr.send_frame(0x7DF, [0x02, 0x01, 0x0C, 0, 0, 0, 0, 0])
+            r_rpm = self.can_mgr.recv_frame(timeout=0.2, expected_id=0x7E8)
+            if r_rpm and len(r_rpm.data) >= 5 and r_rpm.data[1] == 0x41 and r_rpm.data[2] == 0x0C:
+                rpm_final = ((r_rpm.data[3] * 256) + r_rpm.data[4]) / 4.0
+
+        if not muestras:
+            self._log("[ERROR] No se recibieron muestras de tensión del vehículo.")
+            self.wizard_result_signal.emit("test_bateria_arranque", False, "No se recibieron datos de tensión.")
+            return
+
+        v_inicial = muestras[0][1]
+        v_min = min(v for t, v in muestras)
+        v_final = muestras[-1][1]
+        caida = round(v_inicial - v_min, 2)
+
+        # Evaluación Batería
+        if v_min < 8.5:
+            b_estado = "CRÍTICO (Vaso Comunicado)"
+            b_color = "#FF0026"
+            b_diag = f"Desplome severo a {v_min:.2f} V en arranque (mínimo seguro: 9.6V). La batería tiene una celda destruida/comunicada. Causa apagones en centralitas. Requiere cambio urgente."
+        elif v_min < 9.6:
+            b_estado = "DÉBIL / ADVERTENCIA"
+            b_color = "#FF9100"
+            b_diag = f"Caída excesiva a {v_min:.2f} V. Pérdida severa de amperios de arranque en frío (CCA). Riesgo inminente de fallo en invierno."
+        elif caida < 0.25 and rpm_final < 100:
+            b_estado = "SIN DEMANDA DE CORRIENTE"
+            b_color = "#FFCC00"
+            b_diag = "No se detectó caída de tensión. El motor de arranque no llegó a consumir corriente. Revisar fusible de automático, relé de arranque, clausor o escobillas."
+        else:
+            b_estado = "EXCELENTE (Batería Sana)"
+            b_color = "#00FF88"
+            b_diag = f"Caída dentro de tolerancia ({v_min:.2f} V > 9.6V). Resistencia interna baja y alta capacidad de arranque."
+
+        # Evaluación Alternador
+        if rpm_final > 450:
+            if 13.7 <= v_final <= 14.85:
+                alt_estado = f"CARGA ÓPTIMA ({v_final:.2f} V)"
+                alt_color = "#00FF88"
+                alt_diag = f"Alternador y regulador funcionando en rango perfecto ({v_final:.2f} V a {rpm_final:.0f} RPM)."
+            elif v_final < 13.2:
+                alt_estado = f"FALLO DE CARGA ({v_final:.2f} V)"
+                alt_color = "#FF0026"
+                alt_diag = f"Tensión insuficiente en marcha ({v_final:.2f} V). El alternador no está cargando."
+            else:
+                alt_estado = f"SOBRECARGA ({v_final:.2f} V)"
+                alt_color = "#FF0026"
+                alt_diag = f"Tensión excesiva ({v_final:.2f} V). Riesgo de sobretensión en centralitas."
+        else:
+            alt_estado = "MOTOR PARADO"
+            alt_color = "#94A3B8"
+            alt_diag = "El motor no se encuentra en marcha; el alternador permaneció en reposo."
+
+        resultado = {
+            "v_inicial": v_inicial,
+            "v_min": v_min,
+            "v_final": v_final,
+            "caida": caida,
+            "rpm_final": rpm_final,
+            "bateria_estado": b_estado,
+            "bateria_color": b_color,
+            "bateria_diag": b_diag,
+            "alternador_estado": alt_estado,
+            "alternador_color": alt_color,
+            "alternador_diag": alt_diag,
+            "muestras": muestras
+        }
+
+        self._log(f"[RESULTADO TEST BATERÍA] V_Inicial={v_inicial:.2f}V | V_Min={v_min:.2f}V | V_Final={v_final:.2f}V | RPM={rpm_final:.0f}")
+        self._log(f"  ▸ Batería: {b_estado}")
+        self._log(f"  ▸ Alternador: {alt_estado}")
+        self.wizard_data_signal.emit("test_bateria_arranque", resultado)
 
     def _abs_purga(self):
         sim = (self.hardware_tipo == "SIMULADO")

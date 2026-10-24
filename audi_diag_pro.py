@@ -1275,8 +1275,204 @@ class MainWindow(QMainWindow):
         lyt_mmi.addStretch()
         tabs_maint.addTab(tab_mmi, "🟢  Menú Verde MMI (GEM / SD)")
 
+        # ── TAB 11: TEST FORENSE DE ARRANQUE, BATERÍA Y ALTERNADOR (UNIVERSAL) ──
+        tab_test_arranque = self._crear_tab_test_arranque()
+        tabs_maint.addTab(tab_test_arranque, "⚡  Test Batería y Alternador (Universal)")
+
         lyt.addWidget(tabs_maint, stretch=1)
         self.stack.addWidget(page)
+
+    def _crear_tab_test_arranque(self) -> QWidget:
+        tab = QWidget()
+        lyt = QVBoxLayout(tab)
+        lyt.setContentsMargins(16, 16, 16, 16)
+        lyt.setSpacing(12)
+
+        # Card Principal
+        card = QFrame()
+        card.setObjectName("card_modo")
+        c_lyt = QVBoxLayout(card)
+        c_lyt.setContentsMargins(18, 14, 18, 14)
+        c_lyt.setSpacing(10)
+
+        lbl_desc = QLabel(
+            "<b>Diagnóstico Universal de Arranque, Batería y Alternador (Audi / VW / Opel / Multimarca):</b><br>"
+            "Este asistente analiza en milisegundos la caída de tensión bajo demanda del motor de arranque (caída crítica < 8.5V "
+            "indica celda muerta o batería agotada), la estabilidad de reposo y la tensión de carga del alternador en marcha."
+        )
+        lbl_desc.setStyleSheet("color: #CBD5E1; font-size: 13px; line-height: 1.4;")
+        lbl_desc.setWordWrap(True)
+        c_lyt.addWidget(lbl_desc)
+
+        # Fila de Controles
+        fila_ctrl = QHBoxLayout()
+        fila_ctrl.setSpacing(10)
+
+        self.btn_iniciar_test_bat = QPushButton("⚡   INICIAR TEST DE ARRANQUE (8 Segundos)")
+        self.btn_iniciar_test_bat.setProperty("class", "btn-peligro")
+        self.btn_iniciar_test_bat.setFixedHeight(44)
+        self.btn_iniciar_test_bat.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_iniciar_test_bat.clicked.connect(self._iniciar_test_bateria_arranque)
+        fila_ctrl.addWidget(self.btn_iniciar_test_bat, stretch=2)
+
+        lbl_sim_tag = QLabel("Escenario Simulado:")
+        lbl_sim_tag.setStyleSheet("color: #94A3B8; font-size: 12px; font-weight: bold;")
+        fila_ctrl.addWidget(lbl_sim_tag)
+
+        self.combo_test_bat_sim = QComboBox()
+        self.combo_test_bat_sim.addItems([
+            "Automático según vehículo",
+            "Batería Colapsada / Celda Muerta (Caso Opel 6V)",
+            "Batería Saludable (Arranca OK)",
+            "Fallo Relé / Mando Arranque (0V Caída)"
+        ])
+        self.combo_test_bat_sim.setFixedHeight(44)
+        self.combo_test_bat_sim.setStyleSheet("background-color: #11141C; color: #F1F5F9; border: 1px solid #232836; border-radius: 6px; padding: 4px 8px; font-size: 12px;")
+        fila_ctrl.addWidget(self.combo_test_bat_sim, stretch=2)
+
+        self.btn_exportar_pdf_bat = QPushButton("📄   Exportar Informe PDF")
+        self.btn_exportar_pdf_bat.setProperty("class", "btn-accion")
+        self.btn_exportar_pdf_bat.setFixedHeight(44)
+        self.btn_exportar_pdf_bat.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_exportar_pdf_bat.clicked.connect(self._exportar_informe_bateria_pdf)
+        fila_ctrl.addWidget(self.btn_exportar_pdf_bat, stretch=1)
+
+        c_lyt.addLayout(fila_ctrl)
+
+        # Banner de Estado e Instrucciones
+        self.lbl_tb_instrucciones = QLabel(
+            "💡 Paso a paso: 1. Pon solo el contacto  ➜  2. Pulsa 'Iniciar Test'  ➜  3. Cuando comience la cuenta atrás, gira la llave a arranque 2-3 segundos."
+        )
+        self.lbl_tb_instrucciones.setStyleSheet("color: #38BDF8; font-size: 12.5px; font-weight: 600; padding: 4px 0;")
+        c_lyt.addWidget(self.lbl_tb_instrucciones)
+
+        # Fila de 4 Tarjetas de Métricas
+        fila_metricas = QHBoxLayout()
+        fila_metricas.setSpacing(10)
+
+        def _crear_card_metrica(titulo: str):
+            f = QFrame()
+            f.setStyleSheet("background-color: #11141C; border: 1px solid #232836; border-radius: 8px; padding: 8px;")
+            l = QVBoxLayout(f)
+            l.setContentsMargins(10, 6, 10, 6)
+            l.setSpacing(3)
+            lt = QLabel(titulo)
+            lt.setStyleSheet("color: #94A3B8; font-size: 11px; font-weight: 700; text-transform: uppercase;")
+            lv = QLabel("--.- V")
+            lv.setStyleSheet("color: #F8FAFC; font-size: 20px; font-weight: 800;")
+            l.addWidget(lt)
+            l.addWidget(lv)
+            return f, lv
+
+        c1, self.lbl_tb_v_inicial = _crear_card_metrica("Tensión Reposo (Contacto)")
+        c2, self.lbl_tb_v_min = _crear_card_metrica("Pico Mínimo (Caída Arranque)")
+        c3, self.lbl_tb_v_final = _crear_card_metrica("Tensión en Marcha (Alternador)")
+        c4, self.lbl_tb_rpm = _crear_card_metrica("Régimen Motor (Ralentí)")
+        self.lbl_tb_rpm.setText("-- RPM")
+
+        fila_metricas.addWidget(c1)
+        fila_metricas.addWidget(c2)
+        fila_metricas.addWidget(c3)
+        fila_metricas.addWidget(c4)
+        c_lyt.addLayout(fila_metricas)
+
+        # Tarjeta de Veredicto Clínico
+        f_veredicto = QFrame()
+        f_veredicto.setStyleSheet("background-color: #141824; border: 1px solid #1E293B; border-radius: 8px; padding: 12px;")
+        lyt_v = QVBoxLayout(f_veredicto)
+        lyt_v.setContentsMargins(12, 10, 12, 10)
+        lyt_v.setSpacing(6)
+
+        self.lbl_tb_estado_bat = QLabel("🔋 Estado de la Batería: Pendiente de Test")
+        self.lbl_tb_estado_bat.setStyleSheet("color: #F8FAFC; font-size: 13.5px; font-weight: 800;")
+        self.lbl_tb_diag_bat = QLabel("Pulsa 'Iniciar Test' y gira la llave para analizar el estado de salud química de las celdas y la corriente CCA.")
+        self.lbl_tb_diag_bat.setStyleSheet("color: #94A3B8; font-size: 12px; line-height: 1.4;")
+        self.lbl_tb_diag_bat.setWordWrap(True)
+
+        self.lbl_tb_estado_alt = QLabel("⚡ Estado del Alternador: Pendiente de Test")
+        self.lbl_tb_estado_alt.setStyleSheet("color: #F8FAFC; font-size: 13.5px; font-weight: 800; margin-top: 4px;")
+        self.lbl_tb_diag_alt = QLabel("Se verificará la tensión de carga del regulador cuando el motor esté encendido a ralentí.")
+        self.lbl_tb_diag_alt.setStyleSheet("color: #94A3B8; font-size: 12px; line-height: 1.4;")
+        self.lbl_tb_diag_alt.setWordWrap(True)
+
+        lyt_v.addWidget(self.lbl_tb_estado_bat)
+        lyt_v.addWidget(self.lbl_tb_diag_bat)
+        lyt_v.addWidget(self.lbl_tb_estado_alt)
+        lyt_v.addWidget(self.lbl_tb_diag_alt)
+        c_lyt.addWidget(f_veredicto)
+
+        # Tabla de Telemetría Timeline
+        lbl_tbl_title = QLabel("Telemetría en Vivo de la Maniobra (Muestreo a Alta Velocidad):")
+        lbl_tbl_title.setStyleSheet("color: #E2E8F0; font-size: 12px; font-weight: 700; margin-top: 4px;")
+        c_lyt.addWidget(lbl_tbl_title)
+
+        self.tabla_tb_muestras = QTableWidget(0, 3)
+        self.tabla_tb_muestras.setHorizontalHeaderLabels(["Tiempo Relativo", "Tensión Medida", "Estado Eléctrico"])
+        self.tabla_tb_muestras.horizontalHeader().setStretchLastSection(True)
+        self.tabla_tb_muestras.setColumnWidth(0, 140)
+        self.tabla_tb_muestras.setColumnWidth(1, 150)
+        self.tabla_tb_muestras.setFixedHeight(140)
+        self.tabla_tb_muestras.setStyleSheet(
+            "background-color: #0E121B; border: 1px solid #1E293B; border-radius: 6px; color: #F1F5F9; font-size: 12px;"
+        )
+        c_lyt.addWidget(self.tabla_tb_muestras)
+
+        lyt.addWidget(card)
+        lyt.addStretch()
+        return tab
+
+    def _iniciar_test_bateria_arranque(self):
+        if self.worker.isRunning():
+            self.escribir_consola("\n[AVISO] Hay otra operación en curso. Espera a que finalice.")
+            return
+
+        idx_sim = self.combo_test_bat_sim.currentIndex()
+        mapa_sim = {
+            0: "auto",
+            1: "bateria_muerta",
+            2: "sana",
+            3: "starter_fail"
+        }
+        escenario = mapa_sim.get(idx_sim, "auto")
+
+        self.btn_iniciar_test_bat.setEnabled(False)
+        self.lbl_tb_instrucciones.setText("⚡ ¡GRABANDO BUS EN TIEMPO REAL! ➜ ¡GIRA LA LLAVE A POSICIÓN DE ARRANQUE AHORA MISMO! (2-3 segundos)")
+        self.lbl_tb_instrucciones.setStyleSheet("color: #FF0026; font-size: 13px; font-weight: 800; padding: 4px 0;")
+        self.tabla_tb_muestras.setRowCount(0)
+        self.escribir_consola("\n[TEST BATERÍA] Iniciando ensayo forense de caída de tensión en arranque...")
+
+        self.worker.ejecutar("test_bateria_arranque", duracion=8.0, escenario_sim=escenario)
+
+    def _exportar_informe_bateria_pdf(self):
+        pdf_path = os.path.join(config.BASE_DIR, "INFORME_DIAGNOSTICO_BATERIA_OPEL_CORSA.pdf")
+        html_path = os.path.join(config.BASE_DIR, "informe_bateria_opel_corsa.html")
+
+        edge_exe = r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+        if not os.path.exists(edge_exe):
+            edge_exe = r"C:\Program Files\Microsoft\Edge\Application\msedge.exe"
+
+        if os.path.exists(edge_exe) and os.path.exists(html_path):
+            import subprocess
+            try:
+                subprocess.run([
+                    edge_exe, "--headless", "--disable-gpu", "--run-all-compositor-stages-before-draw",
+                    f"--print-to-pdf={pdf_path}", f"file:///{html_path.replace(os.sep, '/')}"
+                ], timeout=15)
+            except Exception as e:
+                self.escribir_consola(f"[AVISO] Error al compilar PDF vía Edge: {e}")
+
+        if os.path.exists(pdf_path):
+            self.escribir_consola(f"\n[INFORME] Abriendo informe técnico oficial en PDF: {pdf_path}")
+            try:
+                os.startfile(pdf_path)
+            except Exception as e:
+                self.escribir_consola(f"[AVISO] No se pudo abrir automáticamente el PDF: {e}")
+            QMessageBox.information(
+                self, "Informe PDF Generado",
+                f"El informe técnico oficial de la batería y alternador ha sido generado con éxito:\n\n{pdf_path}"
+            )
+        else:
+            QMessageBox.warning(self, "Aviso", f"No se encontró el archivo PDF generado en:\n{pdf_path}")
 
     # ══════════════════════════════════════════════════════════════════════════
     #  PÁGINA 4 — LONG CODING & CONFORT
@@ -1812,6 +2008,74 @@ class MainWindow(QMainWindow):
         self.worker.ejecutar("bateria_codificar", ah=txt_ah, marca=marca, serie=serie)
 
     def _recibir_wizard_datos(self, wizard: str, datos: dict):
+        if wizard == "test_bateria_arranque":
+            if hasattr(self, "btn_iniciar_test_bat"):
+                self.btn_iniciar_test_bat.setEnabled(True)
+            if hasattr(self, "lbl_tb_instrucciones"):
+                self.lbl_tb_instrucciones.setText("✓ Test completado con éxito. Consulta el veredicto clínico y los datos de telemetría a continuación.")
+                self.lbl_tb_instrucciones.setStyleSheet("color: #00FF88; font-size: 12.5px; font-weight: 700; padding: 4px 0;")
+
+            v_ini = datos.get("v_inicial", 0.0)
+            v_min = datos.get("v_min", 0.0)
+            v_fin = datos.get("v_final", 0.0)
+            rpm = datos.get("rpm_final", 0.0)
+
+            if hasattr(self, "lbl_tb_v_inicial"):
+                self.lbl_tb_v_inicial.setText(f"{v_ini:.2f} V")
+            if hasattr(self, "lbl_tb_v_min"):
+                self.lbl_tb_v_min.setText(f"{v_min:.2f} V")
+                col_min = datos.get("bateria_color", "#F8FAFC")
+                self.lbl_tb_v_min.setStyleSheet(f"color: {col_min}; font-size: 20px; font-weight: 800;")
+            if hasattr(self, "lbl_tb_v_final"):
+                self.lbl_tb_v_final.setText(f"{v_fin:.2f} V")
+            if hasattr(self, "lbl_tb_rpm"):
+                self.lbl_tb_rpm.setText(f"{rpm:.0f} RPM")
+
+            b_est = datos.get("bateria_estado", "OK")
+            b_diag = datos.get("bateria_diag", "")
+            col_min = datos.get("bateria_color", "#00FF88")
+            if hasattr(self, "lbl_tb_estado_bat"):
+                self.lbl_tb_estado_bat.setText(f"🔋 Batería: {b_est}")
+                self.lbl_tb_estado_bat.setStyleSheet(f"color: {col_min}; font-size: 13.5px; font-weight: 800;")
+            if hasattr(self, "lbl_tb_diag_bat"):
+                self.lbl_tb_diag_bat.setText(b_diag)
+
+            alt_est = datos.get("alternador_estado", "MOTOR PARADO")
+            alt_diag = datos.get("alternador_diag", "")
+            alt_col = datos.get("alternador_color", "#94A3B8")
+            if hasattr(self, "lbl_tb_estado_alt"):
+                self.lbl_tb_estado_alt.setText(f"⚡ Alternador: {alt_est}")
+                self.lbl_tb_estado_alt.setStyleSheet(f"color: {alt_col}; font-size: 13.5px; font-weight: 800; margin-top: 4px;")
+            if hasattr(self, "lbl_tb_diag_alt"):
+                self.lbl_tb_diag_alt.setText(alt_diag)
+
+            muestras = datos.get("muestras", [])
+            if hasattr(self, "tabla_tb_muestras") and muestras:
+                step = max(1, len(muestras) // 15)
+                self.tabla_tb_muestras.setRowCount(0)
+                for t, v in muestras[::step]:
+                    r_idx = self.tabla_tb_muestras.rowCount()
+                    self.tabla_tb_muestras.insertRow(r_idx)
+                    self.tabla_tb_muestras.setItem(r_idx, 0, QTableWidgetItem(f"{t:.2f} s"))
+                    item_v = QTableWidgetItem(f"{v:.2f} V")
+                    if v < 8.5:
+                        item_v.setForeground(QColor("#FF0026"))
+                        desc_e = "Colapso severo / Caída crítica"
+                    elif v < 10.0:
+                        item_v.setForeground(QColor("#FF9100"))
+                        desc_e = "Demanda de motor de arranque"
+                    elif v > 13.5:
+                        item_v.setForeground(QColor("#00FF88"))
+                        desc_e = "Motor en marcha (Alternador cargando)"
+                    else:
+                        item_v.setForeground(QColor("#E2E8F0"))
+                        desc_e = "Reposo / Contacto ON"
+                    self.tabla_tb_muestras.setItem(r_idx, 1, item_v)
+                    self.tabla_tb_muestras.setItem(r_idx, 2, QTableWidgetItem(desc_e))
+
+            self._ultimo_test_bateria = datos
+            return
+
         if wizard == "bateria_leida":
             ok = datos.get("ok", False)
             msg = datos.get("msg", "")
@@ -2014,6 +2278,13 @@ class MainWindow(QMainWindow):
     def recibir_vin(self, vin: str):
         if self.es_modo_kline:
             self.lbl_vin.setText(f"{vin} (VW Polo 9N3)")
+        elif vin.startswith("W0L"):
+            self.lbl_vin.setText(f"{vin} (Opel Corsa D)")
+            if hasattr(self, "combo_modo") and self.combo_modo.currentIndex() not in (2, 3, 6):
+                self.combo_modo.blockSignals(True)
+                self.combo_modo.setCurrentIndex(2)
+                self.combo_modo.blockSignals(False)
+                self._al_cambiar_modo_vehiculo(2)
         else:
             self.lbl_vin.setText(vin)
         self.lbl_sesion_num.setText(f"# {self.worker.sesion_id}")
@@ -2045,6 +2316,9 @@ class MainWindow(QMainWindow):
             elif "MEMORIA" in cod_str or "GUARDADO" in cod_str:
                 estado_str = "En Memoria"
                 color_texto = "#FFCC00"
+            elif "PENDIENTE" in cod_str.upper() or "OBSERVACIÓN" in cod_str.upper():
+                estado_str = "Pendiente (En Observación)"
+                color_texto = "#FFB347"
 
             partes = cod_str.split()
             if partes:
@@ -2057,12 +2331,12 @@ class MainWindow(QMainWindow):
             self.tabla_dtc.setItem(row, 1, item_cod)
             self.tabla_dtc.setItem(row, 2, QTableWidgetItem(desc))
 
-            # Prioridad de avería técnica VAG
+            # Prioridad de avería técnica VAG / Opel
             mod_up = str(modulo).upper()
-            if "01" in mod_up or "02" in mod_up or "03" in mod_up or "15" in mod_up:
-                prioridad_txt = "1 — Crítica" if "Activo" in estado_str else "2 — Taller"
+            if "01" in mod_up or "02" in mod_up or "03" in mod_up or "15" in mod_up or "MOTOR" in mod_up or "ECM" in mod_up or "OBD" in mod_up:
+                prioridad_txt = "1 — Crítica" if "Activo" in estado_str else "2 — Taller / Observación"
                 color_prio = "#FF0026" if "Activo" in estado_str else "#FF9100"
-            elif "17" in mod_up or "19" in mod_up or "53" in mod_up:
+            elif "17" in mod_up or "19" in mod_up or "53" in mod_up or "FRENOS" in mod_up or "ABS" in mod_up:
                 prioridad_txt = "3 — Seguridad"
                 color_prio = "#FFB347"
             else:
@@ -2904,15 +3178,14 @@ class MainWindow(QMainWindow):
             # Aislamiento Mantenimiento Polo 9N3
             if hasattr(self, "tabs_mantenimiento"):
                 for i in range(self.tabs_mantenimiento.count()):
-                    self.tabs_mantenimiento.setTabVisible(i, i in (1, 5, 7))
+                    self.tabs_mantenimiento.setTabVisible(i, i in (1, 5, 7, 10))
                 self.tabs_mantenimiento.setCurrentIndex(1)
             if hasattr(self, "lbl_maint_titulo"):
                 self.lbl_maint_titulo.setText("Wizards de Mantenimiento y Servicio — VW Polo 9N3")
             if hasattr(self, "lbl_maint_subtitulo"):
                 self.lbl_maint_subtitulo.setText(
                     "Operaciones guiadas de taller para VW Polo 9N3 (Plataforma PQ24): Reset de servicio SRI (17), "
-                    "purga hidráulica asistida ABS (03) y calibración sensor de dirección G85 (03/44). "
-                    "Se han filtrado automáticamente los sistemas no equipados (Caja automática, DPF, EPB, BEM, MMI)."
+                    "purga hidráulica asistida ABS (03), sensor G85 y Test Universal de Batería, Arranque y Alternador."
                 )
 
             # Aislamiento Soft Coding Polo 9N3
@@ -3022,14 +3295,13 @@ class MainWindow(QMainWindow):
             # Aislamiento Mantenimiento Opel Corsa
             if hasattr(self, "tabs_mantenimiento"):
                 for i in range(self.tabs_mantenimiento.count()):
-                    self.tabs_mantenimiento.setTabVisible(i, i == 1)
+                    self.tabs_mantenimiento.setTabVisible(i, i in (1, 10))
                 self.tabs_mantenimiento.setCurrentIndex(1)
             if hasattr(self, "lbl_maint_titulo"):
                 self.lbl_maint_titulo.setText("Wizards de Mantenimiento y Servicio — Opel Corsa D")
             if hasattr(self, "lbl_maint_subtitulo"):
                 self.lbl_maint_subtitulo.setText(
-                    "Operaciones guiadas de taller para Opel Corsa D: Reset de intervalos de servicio e inspección. "
-                    "Se han filtrado los asistentes específicos de VAG."
+                    "Operaciones guiadas de taller para Opel Corsa D: Reset de intervalos de servicio y Test Universal de Batería, Arranque y Alternador."
                 )
 
             # Aislamiento Long Coding Opel Corsa
